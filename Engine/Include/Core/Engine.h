@@ -5,6 +5,7 @@
 #include "Core/Overlay.h"
 #include "Scene/SceneFactory.h"
 #include <SFML/Graphics.hpp>
+#include <array>
 
 class Engine {
 private:
@@ -16,9 +17,11 @@ private:
 
   Overlay overlay_;
   bool cursorWasVisible_;
+  const sf::Texture *completedFrame_{};
+  std::array<bool, 2> fullscreenKeysHeld_{};
 
 public:
-  Engine();
+  explicit Engine(bool visible = true);
 
   bool IsRunning() const;
   bool HasFocus() const;
@@ -26,9 +29,18 @@ public:
   void ProcessEvent();
   void Update();
   void Render();
+  void SmokeStep(int step);
+  bool SaveScreenshot(const std::string &filename) const;
 
 private:
   friend EngineVisitor;
+  void SmokeWindowTransitions();
+  void SmokeConsumers();
+  void ProcessWindowEvent(const sf::Event &event);
+  bool ApplyWindowChanges();
+  void SynchronizeWindowFocus(bool reapplyCursor = false);
+  bool EventFullscreenShortcut(const sf::Event::KeyPressed &key);
+  void EventShortcutReleased(const sf::Event::KeyReleased &key);
   void EventWindowClose();
   void EventWindowResized(sf::Vector2u size);
   void EventWindowFocusLost();

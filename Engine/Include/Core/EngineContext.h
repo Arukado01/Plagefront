@@ -14,8 +14,10 @@
 #include "Managers/SceneManager.h"
 #include "Managers/ScreenshotManager.h"
 #include "Managers/TimeManager.h"
+#include "Managers/WindowManager.h"
 
 struct EngineContext {
+  WindowManager window;
   RandomManager random;
   TimeManager time;
   SaveManager save;
@@ -29,6 +31,6 @@ struct EngineContext {
   GuiManager gui;
   SceneManager scenes;
 
-  EngineContext(sf::RenderWindow &window)
-      : screenshot(window), cursor(window), gui(window) {}
+  EngineContext(sf::RenderWindow &renderWindow, bool visible = true)
+      : window(renderWindow, visible), screenshot(renderWindow), cursor(renderWindow), gui(renderWindow) {}
 };

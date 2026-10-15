@@ -3,10 +3,12 @@
 
 sf::Texture *ResourceManager::FetchTexture(const std::string &filename) {
   if (!textures_.contains(filename)) {
-    if (!textures_[filename].loadFromFile("Content/Textures/" + filename)) {
+    sf::Texture texture;
+    if (!texture.loadFromFile("Content/Textures/" + filename)) {
       LOG_ERROR("Failed to load texture: {}", filename);
       return nullptr;
     }
+    textures_.emplace(filename, std::move(texture));
   }
 
   return &textures_.at(filename);
@@ -14,10 +16,12 @@ sf::Texture *ResourceManager::FetchTexture(const std::string &filename) {
 
 sf::SoundBuffer *ResourceManager::FetchSound(const std::string &filename) {
   if (!sounds_.contains(filename)) {
-    if (!sounds_[filename].loadFromFile("Content/Sounds/" + filename)) {
+    sf::SoundBuffer buffer;
+    if (!buffer.loadFromFile("Content/Sounds/" + filename)) {
       LOG_ERROR("Failed to load sound: {}", filename);
       return nullptr;
     }
+    sounds_.emplace(filename, std::move(buffer));
   }
 
   return &sounds_.at(filename);
@@ -25,10 +29,12 @@ sf::SoundBuffer *ResourceManager::FetchSound(const std::string &filename) {
 
 sf::Font *ResourceManager::FetchFont(const std::string &filename) {
   if (!fonts_.contains(filename)) {
-    if (!fonts_[filename].openFromFile("Content/Fonts/" + filename)) {
+    sf::Font font;
+    if (!font.openFromFile("Content/Fonts/" + filename)) {
       LOG_ERROR("Failed to load font: {}", filename);
       return nullptr;
     }
+    fonts_.emplace(filename, std::move(font));
   }
 
   return &fonts_.at(filename);

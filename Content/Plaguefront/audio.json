@@ -1,0 +1,344 @@
+{
+  "version": 1,
+  "origin": "Original local procedural compositions and sound design, PlaguefrontSynth",
+  "format": "PCM signed 16-bit mono WAV",
+  "sample_rate": 22050,
+  "cues": [
+    {
+      "id": "music_menu",
+      "file": "Content/Audio/Plaguefront/Music/menu.wav",
+      "bus": "music",
+      "gain": 58,
+      "loop": true,
+      "cooldown": 0
+    },
+    {
+      "id": "music_battle",
+      "file": "Content/Audio/Plaguefront/Music/battle.wav",
+      "bus": "music",
+      "gain": 51,
+      "loop": true,
+      "cooldown": 0
+    },
+    {
+      "id": "music_victory",
+      "file": "Content/Audio/Plaguefront/Music/victory.wav",
+      "bus": "music",
+      "gain": 58,
+      "loop": false,
+      "cooldown": 0
+    },
+    {
+      "id": "music_defeat",
+      "file": "Content/Audio/Plaguefront/Music/defeat.wav",
+      "bus": "music",
+      "gain": 58,
+      "loop": false,
+      "cooldown": 0
+    },
+    {
+      "id": "ambient_battle",
+      "file": "Content/Audio/Plaguefront/Ambient/battle.wav",
+      "bus": "ambient",
+      "gain": 30,
+      "loop": true,
+      "cooldown": 0
+    },
+    {
+      "id": "hover",
+      "file": "Content/Audio/Plaguefront/Sfx/hover.wav",
+      "bus": "effects",
+      "gain": 30,
+      "loop": false,
+      "cooldown": 0.12
+    },
+    {
+      "id": "select",
+      "file": "Content/Audio/Plaguefront/Sfx/select.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "confirm",
+      "file": "Content/Audio/Plaguefront/Sfx/confirm.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "cancel",
+      "file": "Content/Audio/Plaguefront/Sfx/cancel.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "menu",
+      "file": "Content/Audio/Plaguefront/Sfx/menu.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "open",
+      "file": "Content/Audio/Plaguefront/Sfx/open.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "close",
+      "file": "Content/Audio/Plaguefront/Sfx/close.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "notice",
+      "file": "Content/Audio/Plaguefront/Sfx/notice.wav",
+      "bus": "effects",
+      "gain": 78,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "handoff",
+      "file": "Content/Audio/Plaguefront/Sfx/handoff.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "move",
+      "file": "Content/Audio/Plaguefront/Sfx/move.wav",
+      "bus": "effects",
+      "gain": 48,
+      "loop": false,
+      "cooldown": 0.15
+    },
+    {
+      "id": "sword",
+      "file": "Content/Audio/Plaguefront/Sfx/sword.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "dagger",
+      "file": "Content/Audio/Plaguefront/Sfx/dagger.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "axe",
+      "file": "Content/Audio/Plaguefront/Sfx/axe.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "arrow",
+      "file": "Content/Audio/Plaguefront/Sfx/arrow.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "spear",
+      "file": "Content/Audio/Plaguefront/Sfx/spear.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "charge",
+      "file": "Content/Audio/Plaguefront/Sfx/charge.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "impact",
+      "file": "Content/Audio/Plaguefront/Sfx/impact.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.15
+    },
+    {
+      "id": "death",
+      "file": "Content/Audio/Plaguefront/Sfx/death.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "ability",
+      "file": "Content/Audio/Plaguefront/Sfx/ability.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "spell_fire",
+      "file": "Content/Audio/Plaguefront/Sfx/spell_fire.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "spell_ice",
+      "file": "Content/Audio/Plaguefront/Sfx/spell_ice.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "spell_lightning",
+      "file": "Content/Audio/Plaguefront/Sfx/spell_lightning.wav",
+      "bus": "effects",
+      "gain": 78,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "spell_heal",
+      "file": "Content/Audio/Plaguefront/Sfx/spell_heal.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "spell_support",
+      "file": "Content/Audio/Plaguefront/Sfx/spell_support.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "incinerate",
+      "file": "Content/Audio/Plaguefront/Sfx/incinerate.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "purify",
+      "file": "Content/Audio/Plaguefront/Sfx/purify.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "rot_birth",
+      "file": "Content/Audio/Plaguefront/Sfx/rot_birth.wav",
+      "bus": "effects",
+      "gain": 78,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "rot_pulse",
+      "file": "Content/Audio/Plaguefront/Sfx/rot_pulse.wav",
+      "bus": "effects",
+      "gain": 48,
+      "loop": false,
+      "cooldown": 5.0
+    },
+    {
+      "id": "capture_house",
+      "file": "Content/Audio/Plaguefront/Sfx/capture_house.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "capture_fortress",
+      "file": "Content/Audio/Plaguefront/Sfx/capture_fortress.wav",
+      "bus": "effects",
+      "gain": 78,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "recruit",
+      "file": "Content/Audio/Plaguefront/Sfx/recruit.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "buy",
+      "file": "Content/Audio/Plaguefront/Sfx/buy.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "income",
+      "file": "Content/Audio/Plaguefront/Sfx/income.wav",
+      "bus": "effects",
+      "gain": 48,
+      "loop": false,
+      "cooldown": 0.15
+    },
+    {
+      "id": "build",
+      "file": "Content/Audio/Plaguefront/Sfx/build.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "item",
+      "file": "Content/Audio/Plaguefront/Sfx/item.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "turn",
+      "file": "Content/Audio/Plaguefront/Sfx/turn.wav",
+      "bus": "effects",
+      "gain": 48,
+      "loop": false,
+      "cooldown": 0.08
+    },
+    {
+      "id": "round",
+      "file": "Content/Audio/Plaguefront/Sfx/round.wav",
+      "bus": "effects",
+      "gain": 65,
+      "loop": false,
+      "cooldown": 0.08
+    }
+  ]
+}

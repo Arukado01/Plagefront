@@ -26,10 +26,10 @@ void GuiManager::Remove(const tgui::Widget::Ptr &widget) {
 }
 
 void GuiManager::HandleEvent(const sf::Event::Resized &resized) {
-  const sf::Vector2f defaultSize = window_.getDefaultView().getSize();
-  const sf::Vector2f scale =
-      sf::Vector2f(resized.size).componentWiseDiv(defaultSize);
-  gui_.setRelativeView({0, 0, 1 / scale.x, 1 / scale.y});
+  if (!resized.size.x || !resized.size.y)
+    return;
+  // TGUI recalcula sus controles relativos en píxeles físicos al redimensionar; la vista predeterminada de SFML puede estar obsoleta.
+  gui_.setRelativeView({0, 0, 1, 1});
 }
 
 void GuiManager::HandleEvent(const sf::Event::JoystickButtonPressed &joystick) {

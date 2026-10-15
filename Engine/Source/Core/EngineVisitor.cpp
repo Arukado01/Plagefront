@@ -2,58 +2,82 @@
 #include "Core/Engine.h"
 #include "Utils/InputBindings.h"
 
-void EngineVisitor::operator()(const sf::Event::Closed &) {
-  engine.EventWindowClose();
+bool EngineVisitor::operator()(const sf::Event::Closed &) {
+  if (!engine.currentScene_ || !engine.currentScene_->OnCloseRequest())
+    engine.EventWindowClose();
+  return true;
 }
 
-void EngineVisitor::operator()(const sf::Event::Resized &resized) {
+bool EngineVisitor::operator()(const sf::Event::Resized &resized) {
   engine.EventWindowResized(resized.size);
+  return false;
 }
 
-void EngineVisitor::operator()(const sf::Event::FocusLost &) {
+bool EngineVisitor::operator()(const sf::Event::FocusLost &) {
   engine.EventWindowFocusLost();
+  return false;
 }
 
-void EngineVisitor::operator()(const sf::Event::FocusGained &) {
+bool EngineVisitor::operator()(const sf::Event::FocusGained &) {
   engine.EventWindowFocusGained();
+  return false;
 }
 
-void EngineVisitor::operator()(const sf::Event::JoystickConnected &joystick) {
+bool EngineVisitor::operator()(const sf::Event::JoystickConnected &joystick) {
   engine.EventGamepadConnected(joystick.joystickId);
+  return false;
 }
 
-void EngineVisitor::operator()(
+bool EngineVisitor::operator()(
     const sf::Event::JoystickDisconnected &joystick) {
   engine.EventGamepadDisconnected(joystick.joystickId);
+  return false;
 }
 
-void EngineVisitor::operator()(const sf::Event::KeyPressed &key) {
+bool EngineVisitor::operator()(const sf::Event::KeyPressed &key) {
+  if (engine.EventFullscreenShortcut(key))
+    return true;
   if (key.scancode == sf::Keyboard::Scan::F12) {
     engine.EventWindowScreenshot();
+    return true;
   }
-
-  else if (key.scancode == sf::Keyboard::Scan::R) {
+  if (engine.currentScene_ && engine.currentScene_->HandlesNavigation())
+    return false;
+  if (key.scancode == sf::Keyboard::Scan::R) {
     engine.EventSceneRestart();
+    return true;
   }
-
-  else if (key.scancode == sf::Keyboard::Scan::M) {
+  if (key.scancode == sf::Keyboard::Scan::M) {
     engine.EventSceneMenuReturn();
+    return true;
   }
-
-  else if (key.scancode == sf::Keyboard::Scan::Escape) {
+  if (key.scancode == sf::Keyboard::Scan::Escape) {
     engine.EventOverlayPauseToggle();
+    return true;
   }
+  return false;
 }
 
-void EngineVisitor::operator()(
+bool EngineVisitor::operator()(const sf::Event::KeyReleased &key) {
+  engine.EventShortcutReleased(key);
+  return false;
+}
+
+bool EngineVisitor::operator()(
     const sf::Event::JoystickButtonPressed &joystick) {
+  // Los juegos integrados usan InputManager; las demostraciones conservan sus atajos del panel de pausa.
+  if (engine.currentScene_ && engine.currentScene_->HandlesNavigation())
+    return false;
   if (const auto button =
           Input::HardwareToLogical(joystick.button, joystick.joystickId)) {
 
     if (*button == GamepadButton::Select) {
       engine.EventSceneMenuReturn();
+      return true;
     } else if (*button == GamepadButton::Start) {
       engine.EventOverlayPauseToggle();
+      return true;
     }
   }
+  return false;
 }

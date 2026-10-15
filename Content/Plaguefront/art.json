@@ -1,0 +1,593 @@
+{
+  "format_version": 1,
+  "generator": "Tools/GenerateArt.ps1",
+  "seed": 731051,
+  "origin": "Original local procedural geometry; no downloaded or generated remote imagery",
+  "pixel_art": {
+    "format_version": 3,
+    "generator": "Tools/GeneratePixelArt.ps1",
+    "origin": "Original integer pixel clusters generated locally; no external images, antialiasing or resampling",
+    "rendering": {
+      "preferred_integer_scale": 2,
+      "filter": "nearest",
+      "alpha_values": [
+        0,
+        255
+      ],
+      "basis_q": [
+        30,
+        14
+      ],
+      "basis_r": [
+        0,
+        28
+      ],
+      "height_step_pixels": 6,
+      "surface_vertices_relative_to_center": [
+        [
+          10,
+          -14
+        ],
+        [
+          20,
+          0
+        ],
+        [
+          10,
+          14
+        ],
+        [
+          -10,
+          14
+        ],
+        [
+          -20,
+          0
+        ],
+        [
+          -10,
+          -14
+        ]
+      ],
+      "vertical_faces": "Drawn by the renderer; terrain atlas contains top surfaces only",
+      "world_resolution": "Board-specific native render target, resized by presentation layout; UI text is rendered independently at output resolution",
+      "ui_text_filter": "antialiased local font, independent of world nearest-neighbor scaling"
+    },
+    "palette": {
+      "ink": "#101b25",
+      "deep": "#192c32",
+      "shadow": "#263b3b",
+      "soil": "#493d36",
+      "dirt": "#6b5642",
+      "sand": "#a88d60",
+      "pale": "#d7ceaa",
+      "iron": [
+        "#303e4c",
+        "#526674",
+        "#849aa0",
+        "#c2d0c1"
+      ],
+      "stone": [
+        "#394542",
+        "#5a6556",
+        "#899078",
+        "#b1b397"
+      ],
+      "wood": [
+        "#332e2b",
+        "#67513b",
+        "#94734b",
+        "#c39b60"
+      ],
+      "foliage": [
+        "#1d3734",
+        "#315444",
+        "#4f7250",
+        "#79935a"
+      ],
+      "grass": [
+        "#566a45",
+        "#768454"
+      ],
+      "water": [
+        "#1d354b",
+        "#2a5363",
+        "#417981",
+        "#83a9a3"
+      ],
+      "blue_team": [
+        "#1e3e76",
+        "#2866b7",
+        "#67a9e3",
+        "#aad5f0"
+      ],
+      "red_team": [
+        "#571c32",
+        "#a92e4c",
+        "#de5b6c",
+        "#f4b09c"
+      ],
+      "violet": [
+        "#34314e",
+        "#594a76",
+        "#8a74ac",
+        "#c3b3d6"
+      ],
+      "skin": [
+        "#775344",
+        "#b88c67",
+        "#e0b98a"
+      ],
+      "red": [
+        "#5e3340",
+        "#ac4b4c",
+        "#dd7956"
+      ],
+      "rot": [
+        "#334535",
+        "#647d3c",
+        "#9fb34f",
+        "#d5d47a"
+      ],
+      "fire": [
+        "#883b37",
+        "#c5643f",
+        "#e7a451",
+        "#f1d794"
+      ],
+      "menu_sky": [
+        "#111d2b",
+        "#1a2936",
+        "#263943",
+        "#34494a",
+        "#44554c"
+      ]
+    },
+    "textures": {
+      "terrain": {
+        "path": "Content/Textures/Plaguefront/Pixel/terrain.png",
+        "size": [
+          480,
+          128
+        ],
+        "frame_size": [
+          48,
+          32
+        ],
+        "anchor": [
+          24,
+          16
+        ],
+        "columns": 10,
+        "rows": 4,
+        "fps": 4,
+        "loop": true,
+        "columns_by_terrain": {
+          "Plain": 0,
+          "Forest": 1,
+          "Hill": 2,
+          "Swamp": 3,
+          "Ruins": 4,
+          "Road": 5,
+          "River": 6,
+          "Bridge": 7,
+          "DeepWater": 8,
+          "Blocked": 9
+        },
+        "row": "animation frame 0..3",
+        "notes": "Four frames of water, reeds and grass; static mineral/road surfaces may repeat. Tall props are separate."
+      },
+      "props": {
+        "path": "Content/Textures/Plaguefront/Pixel/props.png",
+        "size": [
+          512,
+          320
+        ],
+        "frame_size": [
+          64,
+          80
+        ],
+        "anchor": [
+          32,
+          68
+        ],
+        "columns": 8,
+        "rows": 4,
+        "fps": 4,
+        "loop": true,
+        "columns_by_prop": {
+          "forest": 0,
+          "ruins": 1,
+          "blocked_rock": 2,
+          "house": 3,
+          "fortress": 4,
+          "outpost": 5,
+          "corpse": 6,
+          "rot": 7
+        },
+        "row": "animation frame 0..3",
+        "notes": "Trees, buildings and rocks extend above terrain. No ownership cloth is baked into buildings; the renderer draws owner flags and crests. Building windows flicker subtly."
+      },
+      "units": {
+        "path": "Content/Textures/Plaguefront/Pixel/units.png",
+        "size": [
+          2304,
+          3584
+        ],
+        "frame_size": [
+          48,
+          64
+        ],
+        "anchor": [
+          24,
+          56
+        ],
+        "columns": 48,
+        "rows": 56,
+        "frames_per_state": 8,
+        "column_formula": "state * 8 + frame",
+        "row_formula": "class + 7 * team + 14 * direction",
+        "classes": {
+          "Saber": 0,
+          "Archer": 1,
+          "Lancer": 2,
+          "Rider": 3,
+          "Caster": 4,
+          "Assassin": 5,
+          "Berserker": 6
+        },
+        "teams": {
+          "blue_cross": 0,
+          "red_double_bar": 1
+        },
+        "directions": {
+          "southeast_front": 0,
+          "southwest_front": 1,
+          "northeast_back": 2,
+          "northwest_back": 3
+        },
+        "states": {
+          "Idle": {
+            "index": 0,
+            "fps": 9.09,
+            "loop": true
+          },
+          "Walk": {
+            "index": 1,
+            "fps": 16.67,
+            "loop": true
+          },
+          "Attack": {
+            "index": 2,
+            "loop": false,
+            "phases": {
+              "anticipation": [
+                0,
+                1,
+                2
+              ],
+              "contact": [
+                3,
+                4
+              ],
+              "recovery": [
+                5,
+                6,
+                7
+              ]
+            }
+          },
+          "Hurt": {
+            "index": 3,
+            "loop": false
+          },
+          "Death": {
+            "index": 4,
+            "loop": false,
+            "hold_last": true
+          },
+          "Cast": {
+            "index": 5,
+            "loop": false
+          }
+        },
+        "notes": "2688 native frames. Eight unique poses per class/team/direction/state. Blue cloth/cross and crimson cloth/double-bar insignias are authored material variants, never global tinting. Plate, skin, wood and leather stay shared. Caster violet robe and horse brown coat stay shared while tabard/stole and saddle blanket identify the army. Death state frame 7 is a horizontal corpse retaining class equipment and faction, held until environmental conversion. Front/back and mirrored left views use the same frame contract. Presentation controls nonlooped animation timing."
+      },
+      "effects": {
+        "path": "Content/Textures/Plaguefront/Pixel/effects.png",
+        "size": [
+          384,
+          192
+        ],
+        "frame_size": [
+          48,
+          48
+        ],
+        "anchor": [
+          24,
+          24
+        ],
+        "columns": 8,
+        "rows": 4,
+        "fps": 10,
+        "loop": false,
+        "columns_by_effect": {
+          "slash": 0,
+          "arrow": 1,
+          "fire": 2,
+          "ice": 3,
+          "lightning": 4,
+          "heal": 5,
+          "rot_burst": 6,
+          "purify": 7
+        },
+        "row": "animation frame 0..3"
+      },
+      "icons": {
+        "path": "Content/Textures/Plaguefront/Pixel/icons.png",
+        "size": [
+          128,
+          64
+        ],
+        "frame_size": [
+          16,
+          16
+        ],
+        "anchor": [
+          8,
+          8
+        ],
+        "columns": 8,
+        "rows": 4,
+        "cells": {
+          "saber": 0,
+          "archer": 1,
+          "lancer": 2,
+          "rider": 3,
+          "fire": 4,
+          "assassin": 5,
+          "berserker": 6,
+          "guard": 7,
+          "potion": 8,
+          "large_potion": 9,
+          "mana_potion": 10,
+          "antidote": 11,
+          "purification_kit": 12,
+          "gold": 13,
+          "capture": 14,
+          "build": 15,
+          "clear": 16,
+          "rain": 17,
+          "fog": 18,
+          "storm": 19,
+          "rot": 20,
+          "corpse": 21,
+          "movement": 22,
+          "end_activation": 23,
+          "precise_cut": 24,
+          "mark_target": 25,
+          "pike_formation": 26,
+          "charge": 27,
+          "ice": 28,
+          "lightning": 29,
+          "heal": 30,
+          "smoke": 31
+        }
+      },
+      "ui": {
+        "path": "Content/Textures/Plaguefront/Pixel/ui.png",
+        "size": [
+          96,
+          32
+        ],
+        "frame_size": [
+          32,
+          32
+        ],
+        "columns": 3,
+        "rows": 1,
+        "nine_slice_border": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "columns_by_patch": {
+          "panel": 0,
+          "button": 1,
+          "button_hover": 2
+        },
+        "center": "Uniform 16x16 fill to avoid enlarged pixel-grain blocks when stretched; ornaments stay in the 8px border"
+      },
+      "cursors": {
+        "path": "Content/Textures/Plaguefront/Pixel/cursors.png",
+        "size": [144, 24],
+        "frame_size": [24, 24],
+        "columns": 6,
+        "rows": 1,
+        "hotspot": [1, 1],
+        "columns_by_context": {"Normal": 0, "Move": 1, "Attack": 2, "Capture": 3, "Economy": 4, "Blocked": 5},
+        "notes": "Original steel spear-point and bronze grip, with a contextual badge. Native physical pixel scale 1 below 1200 output height and 2 at larger output heights. Context is advisory; Match always validates commands."
+      },
+      "unit_icons": {
+        "path": "Content/Textures/Plaguefront/Pixel/unit-icons.png",
+        "size": [168, 48],
+        "frame_size": [24, 24],
+        "columns": 7,
+        "rows": 2,
+        "column": "UnitClass 0..6",
+        "row": "owner 0 blue cross, 1 red double bar",
+        "notes": "Native portrait from the authored class head, framed with faction cloth and an independent shape insignia. Shared metals, skin and wood retain their original colours."
+      },
+      "menu": {
+        "path": "Content/Textures/Plaguefront/Pixel/menu.png",
+        "size": [
+          720,
+          450
+        ],
+        "frame_size": [
+          720,
+          450
+        ],
+        "columns": 1,
+        "rows": 1,
+        "anchor": [
+          0,
+          0
+        ],
+        "transparent": false,
+        "safe_text_region": [
+          30,
+          40,
+          245,
+          355
+        ]
+      }
+    },
+    "previews": "build/phase4-art; class/faction lineup, six state strips, fallen bodies, unit portraits, six cursor contexts, binary-alpha/palette/clipping/material validation"
+  },
+  "palette": {
+    "ink": "#11191b",
+    "stone": "#777e6c",
+    "stone_highlight": "#a5ab8b",
+    "silver": "#bcc6b7",
+    "earth": "#685b41",
+    "gold": "#c9ab64",
+    "blight": "#a6bf52",
+    "blue_team": "#548ca7",
+    "ochre_team": "#b89151"
+  },
+  "textures": {
+    "tiles": {
+      "path": "Content/Textures/Plaguefront/tiles.png",
+      "width": 512,
+      "height": 128,
+      "cell_size": [
+        64,
+        64
+      ],
+      "columns": 8,
+      "rows": 2,
+      "origin": [
+        32,
+        32
+      ],
+      "pointy_hex_visual_radius": 31,
+      "transparent": true,
+      "cells": {
+        "plain": 0,
+        "forest": 1,
+        "hill": 2,
+        "swamp": 3,
+        "ruins": 4,
+        "road": 5,
+        "river": 6,
+        "bridge": 7,
+        "deep_water": 8,
+        "blocked": 9,
+        "house_overlay": 10,
+        "fortress_overlay": 11,
+        "outpost_overlay": 12,
+        "rot_overlay": 13,
+        "corpse_overlay": 14
+      },
+      "unused_cells": [
+        15
+      ]
+    },
+    "units": {
+      "path": "Content/Textures/Plaguefront/units.png",
+      "width": 448,
+      "height": 128,
+      "cell_size": [
+        64,
+        64
+      ],
+      "columns": 7,
+      "rows": 2,
+      "origin": [
+        32,
+        32
+      ],
+      "transparent": true,
+      "columns_by_class": {
+        "Saber": 0,
+        "Archer": 1,
+        "Lancer": 2,
+        "Rider": 3,
+        "Caster": 4,
+        "Assassin": 5,
+        "Berserker": 6
+      },
+      "rows_by_team": {
+        "blue": 0,
+        "ochre": 1
+      },
+      "frames_per_unit": 1
+    },
+    "icons": {
+      "path": "Content/Textures/Plaguefront/icons.png",
+      "width": 256,
+      "height": 128,
+      "cell_size": [
+        32,
+        32
+      ],
+      "columns": 8,
+      "rows": 4,
+      "transparent": true,
+      "cells": {
+        "saber": 0,
+        "archer": 1,
+        "lancer": 2,
+        "rider": 3,
+        "fire": 4,
+        "assassin": 5,
+        "berserker": 6,
+        "guard": 7,
+        "potion": 8,
+        "large_potion": 9,
+        "mana_potion": 10,
+        "antidote": 11,
+        "purification_kit": 12,
+        "gold": 13,
+        "capture": 14,
+        "build": 15,
+        "clear": 16,
+        "rain": 17,
+        "fog": 18,
+        "storm": 19,
+        "rot": 20,
+        "corpse": 21,
+        "movement": 22,
+        "end_activation": 23,
+        "precise_cut": 24,
+        "mark_target": 25,
+        "pike_formation": 26,
+        "charge": 27,
+        "ice": 28,
+        "lightning": 29,
+        "heal": 30,
+        "smoke": 31
+      }
+    },
+    "menu": {
+      "path": "Content/Textures/Plaguefront/menu.png",
+      "width": 1440,
+      "height": 900,
+      "transparent": false,
+      "safe_text_region": [
+        90,
+        90,
+        550,
+        700
+      ]
+    },
+    "emblem": {
+      "path": "Content/Textures/Plaguefront/emblem.png",
+      "width": 128,
+      "height": 128,
+      "transparent": true
+    }
+  }
+}

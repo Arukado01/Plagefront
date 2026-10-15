@@ -1,12 +1,88 @@
 {
-    "windowTitle": "Awesome Engine",
-    "windowSize": [800, 800],
+    "windowTitle": "Plaguefront",
+    "windowSize": [
+        1440,
+        900
+    ],
+    "referenceSize": [
+        1440,
+        900
+    ],
+    "minimumWindowSize": [
+        960,
+        600
+    ],
+    "windowIcon": "Content/Textures/Plaguefront/emblem.png",
     "disableSfmlLogs": true,
     "maximumDeltaTime": 0.03,
     "globalVolume": 100,
-    "backgroundColor": [100, 100, 100],
+    "backgroundColor": [
+        100,
+        100,
+        100
+    ],
     "cursorRadius": 5,
     "cursorSpeed": 800,
-    "cursorColor": [255, 100, 0],
-    "joystickDeadzone": 0.1
+    "cursorColor": [
+        255,
+        100,
+        0
+    ],
+    "joystickDeadzone": 0.1,
+    "rotPalette": {
+        "sourceShadow": [
+            58,
+            27,
+            76,
+            255
+        ],
+        "sourceBase": [
+            117,
+            57,
+            161,
+            255
+        ],
+        "sourceLight": [
+            187,
+            112,
+            230,
+            255
+        ],
+        "sourceGlow": [
+            239,
+            191,
+            255,
+            255
+        ],
+        "localFill": [
+            139,
+            55,
+            185,
+            66
+        ],
+        "localEdge": [
+            211,
+            139,
+            247,
+            255
+        ],
+        "globalFill": [
+            104,
+            61,
+            153,
+            28
+        ],
+        "spores": [
+            231,
+            173,
+            255,
+            240
+        ],
+        "uiText": [
+            232,
+            190,
+            255,
+            255
+        ]
+    }
 }

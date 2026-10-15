@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.28)
 project(AwesomeEngine CXX)
 
+# Compila sin conexión con las dependencias ya disponibles en build/_deps.
+set(FETCHCONTENT_FULLY_DISCONNECTED ON CACHE BOOL "Never download dependencies" FORCE)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Never update dependencies" FORCE)
+
 set(SFML_BUILD_NETWORK OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(SPDLOG_USE_STD_FORMAT ON)
 set(TGUI_BACKEND SFML_GRAPHICS)
 set(TGUI_BUILD_GUI_BUILDER OFF)
@@ -15,13 +20,111 @@ FetchContent_Declare(tgui URL https://github.com/texus/TGUI/archive/refs/tags/v1
 FetchContent_Declare(magic_enum URL https://github.com/Neargye/magic_enum/archive/refs/tags/v0.9.8.tar.gz)
 FetchContent_MakeAvailable(sfml json logs tgui magic_enum)
 
+# Corrige el prefijo UTF-8 de MSVC en español para que Ninja detecte cabeceras modificadas y reconstruya sus consumidores.
+if(MSVC AND CMAKE_CXX_CL_SHOWINCLUDES_PREFIX MATCHES "^Nota:")
+  set(CMAKE_CL_SHOWINCLUDES_PREFIX "Nota: inclusión del archivo: ")
+endif()
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS Engine/Source/*.cpp Games/Source/*.cpp)
+list(FILTER SOURCES EXCLUDE REGEX "/Plaguefront/(Rules|Persistence|AI|Presentation)\\.cpp$")
+add_library(PlaguefrontLogic STATIC
+  Games/Source/Plaguefront/Rules.cpp
+  Games/Source/Plaguefront/Persistence.cpp
+  Games/Source/Plaguefront/AI.cpp)
+target_include_directories(PlaguefrontLogic PUBLIC Games/Include)
+target_compile_features(PlaguefrontLogic PUBLIC cxx_std_20)
+target_link_libraries(PlaguefrontLogic PUBLIC nlohmann_json::nlohmann_json)
+add_library(PlaguefrontPresentationLogic STATIC Games/Source/Plaguefront/Presentation.cpp)
+target_link_libraries(PlaguefrontPresentationLogic PUBLIC PlaguefrontLogic)
 add_executable(AwesomeEngine ${SOURCES})
+set_target_properties(AwesomeEngine PROPERTIES OUTPUT_NAME Plaguefront)
 
 target_include_directories(AwesomeEngine PRIVATE Engine/Include Games/Include)
 target_compile_features(AwesomeEngine PRIVATE cxx_std_20)
 target_compile_options(AwesomeEngine PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>, /W4, -Wall -Wextra>)
-target_link_libraries(AwesomeEngine PRIVATE SFML::Graphics SFML::Audio nlohmann_json::nlohmann_json spdlog::spdlog TGUI::TGUI magic_enum::magic_enum)
+target_link_libraries(AwesomeEngine PRIVATE PlaguefrontPresentationLogic SFML::Graphics SFML::Audio nlohmann_json::nlohmann_json spdlog::spdlog TGUI::TGUI magic_enum::magic_enum)
+
+if(MSVC)
+  target_compile_options(AwesomeEngine PRIVATE /utf-8)
+  target_compile_options(PlaguefrontLogic PRIVATE /W4 /utf-8)
+  target_compile_options(PlaguefrontPresentationLogic PRIVATE /W4 /utf-8)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(PlaguefrontTests Tests/PlaguefrontTests.cpp)
+  target_link_libraries(PlaguefrontTests PRIVATE PlaguefrontLogic)
+  if(MSVC)
+    target_compile_options(PlaguefrontTests PRIVATE /utf-8)
+  endif()
+  add_test(NAME PlaguefrontRules COMMAND PlaguefrontTests)
+  set_tests_properties(PlaguefrontRules PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+  add_executable(PlaguefrontCampaignTests Tests/CampaignTests.cpp)
+  target_link_libraries(PlaguefrontCampaignTests PRIVATE PlaguefrontLogic)
+  if(MSVC)
+    target_compile_options(PlaguefrontCampaignTests PRIVATE /utf-8)
+  endif()
+  add_test(NAME PlaguefrontCampaigns COMMAND PlaguefrontCampaignTests)
+  set_tests_properties(PlaguefrontCampaigns PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 60)
+  add_test(NAME PlaguefrontPresentation COMMAND AwesomeEngine --smoke)
+  set_tests_properties(PlaguefrontPresentation PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "graphics" TIMEOUT 60 RUN_SERIAL TRUE)
+  add_executable(PlaguefrontProjectionTests Tests/PresentationTests.cpp)
+  target_link_libraries(PlaguefrontProjectionTests PRIVATE PlaguefrontPresentationLogic)
+  add_test(NAME PlaguefrontProjection COMMAND PlaguefrontProjectionTests)
+  set_tests_properties(PlaguefrontProjection PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+  add_executable(PlaguefrontAudioTests Tests/AudioTests.cpp Engine/Source/Managers/AudioManager.cpp Games/Source/Plaguefront/Audio.cpp)
+  target_include_directories(PlaguefrontAudioTests PRIVATE Engine/Include)
+  target_link_libraries(PlaguefrontAudioTests PRIVATE PlaguefrontLogic SFML::Audio nlohmann_json::nlohmann_json)
+  if(MSVC)
+    target_compile_options(PlaguefrontAudioTests PRIVATE /utf-8)
+    target_compile_options(PlaguefrontProjectionTests PRIVATE /utf-8)
+  endif()
+  add_test(NAME PlaguefrontAudio COMMAND PlaguefrontAudioTests)
+  set_tests_properties(PlaguefrontAudio PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "audio" TIMEOUT 60 RUN_SERIAL TRUE)
+  add_executable(PlaguefrontPhase3Tests Tests/Phase3Tests.cpp)
+  target_link_libraries(PlaguefrontPhase3Tests PRIVATE PlaguefrontPresentationLogic)
+  if(MSVC)
+    target_compile_options(PlaguefrontPhase3Tests PRIVATE /W4 /utf-8)
+  endif()
+  add_test(NAME PlaguefrontPhase3 COMMAND PlaguefrontPhase3Tests)
+  set_tests_properties(PlaguefrontPhase3 PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 60)
+  add_executable(PlaguefrontPhase4Tests Tests/Phase4Tests.cpp)
+  target_link_libraries(PlaguefrontPhase4Tests PRIVATE PlaguefrontLogic)
+  if(MSVC)
+    target_compile_options(PlaguefrontPhase4Tests PRIVATE /W4 /utf-8)
+  endif()
+  add_test(NAME PlaguefrontPhase4 COMMAND PlaguefrontPhase4Tests)
+  set_tests_properties(PlaguefrontPhase4 PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 60)
+  add_executable(EngineManagerTests Tests/EngineManagerTests.cpp
+    Engine/Source/Core/EngineConfig.cpp
+    Engine/Source/Managers/RenderManager.cpp
+    Engine/Source/Managers/ResourceManager.cpp
+    Engine/Source/Managers/SaveManager.cpp
+    Engine/Source/Managers/ScreenshotManager.cpp
+    Engine/Source/Managers/WindowManager.cpp
+    Engine/Source/Graphics/Effects/EfflectBloom.cpp
+    Engine/Source/Graphics/Effects/EffectMonitor.cpp)
+  target_include_directories(EngineManagerTests PRIVATE Engine/Include)
+  target_compile_features(EngineManagerTests PRIVATE cxx_std_20)
+  target_link_libraries(EngineManagerTests PRIVATE SFML::Graphics SFML::Audio nlohmann_json::nlohmann_json spdlog::spdlog)
+  if(MSVC)
+    target_compile_options(EngineManagerTests PRIVATE /W4 /utf-8)
+  endif()
+  add_test(NAME EngineManagers COMMAND EngineManagerTests)
+  set_tests_properties(EngineManagers PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "graphics;engine" TIMEOUT 60 RUN_SERIAL TRUE)
+  add_executable(InputManagerTests Tests/InputTests.cpp
+    Engine/Source/Managers/InputManager.cpp
+    Engine/Source/Utils/InputBindings.cpp
+    Engine/Source/Managers/SaveManager.cpp)
+  target_include_directories(InputManagerTests PRIVATE Engine/Include)
+  target_compile_features(InputManagerTests PRIVATE cxx_std_20)
+  target_link_libraries(InputManagerTests PRIVATE SFML::Window nlohmann_json::nlohmann_json)
+  if(MSVC)
+    target_compile_options(InputManagerTests PRIVATE /W4 /utf-8)
+  endif()
+  add_test(NAME InputManager COMMAND InputManagerTests)
+  set_tests_properties(InputManager PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "input;engine" TIMEOUT 60)
+endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND WIN32)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--start-group")

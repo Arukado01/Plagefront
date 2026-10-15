@@ -2,21 +2,7 @@
 #include <SFML/Window.hpp>
 #include <optional>
 #include <variant>
-
-enum class GamepadButton {
-  West,
-  South,
-  East,
-  North,
-  L1,
-  R1,
-  L2,
-  R2,
-  Select,
-  Start,
-  L3,
-  R3
-};
+#include "Types/InputTypes.h"
 
 namespace Input {
   struct Keyboard {
@@ -39,4 +25,5 @@ namespace Input {
 
   std::optional<int> LogicalToHardware(GamepadButton button, int id);
   std::optional<GamepadButton> HardwareToLogical(int button, int id);
-} // namespace Input
+  std::array<int, 12> DefaultHardwareMapping(GamepadProfile profile, unsigned vendorId);
+} // espacio de nombres Input

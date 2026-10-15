@@ -20,4 +20,8 @@ public:
   virtual void OnEvent(const sf::Event &) {};
   virtual void OnPause(bool /* pausa */) {};
   virtual void OnCleanup() {};
+  // Las escenas con menú integrado procesan Escape/R/M en lugar del panel de las demostraciones.
+  virtual bool HandlesNavigation() const { return false; }
+  virtual void SmokeStep(int) {}
+  virtual bool OnCloseRequest() { return false; }
 };
