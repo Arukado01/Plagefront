@@ -13,6 +13,16 @@
 #include <limits>
 #include <SFML/Graphics/Image.hpp>
 #include <stdexcept>
+#include <vector>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
 
 namespace {
   int checks{};
@@ -23,6 +33,158 @@ namespace {
   bool Close(sf::Vector2f left, sf::Vector2f right) {
     return std::abs(left.x-right.x)<0.02f && std::abs(left.y-right.y)<0.02f;
   }
+#ifdef _WIN32
+  struct MonitorSnapshot {
+    HMONITOR handle{};
+    MONITORINFOEXW info{};
+    DEVMODEW mode{};
+  };
+
+  BOOL CALLBACK CollectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM data) {
+    reinterpret_cast<std::vector<HMONITOR> *>(data)->push_back(monitor);
+    return TRUE;
+  }
+
+  bool SameRectangle(const RECT &left, const RECT &right) {
+    return left.left==right.left && left.top==right.top && left.right==right.right && left.bottom==right.bottom;
+  }
+
+  RECT NativeRectangle(const sf::RenderWindow &window) {
+    RECT result{};
+    Check(GetWindowRect(window.getNativeHandle(), &result)!=FALSE,"Could not read the native window rectangle");
+    return result;
+  }
+
+  void VerifyDisplayModes(const std::vector<MonitorSnapshot> &monitors) {
+    for (const auto &monitor : monitors) {
+      DEVMODEW current{};
+      current.dmSize=sizeof(current);
+      Check(EnumDisplaySettingsExW(monitor.info.szDevice,ENUM_CURRENT_SETTINGS,&current,0)!=FALSE,
+            "Could not read the current physical display mode");
+      Check(current.dmPelsWidth==monitor.mode.dmPelsWidth && current.dmPelsHeight==monitor.mode.dmPelsHeight &&
+            current.dmBitsPerPel==monitor.mode.dmBitsPerPel && current.dmDisplayFrequency==monitor.mode.dmDisplayFrequency &&
+            current.dmPosition.x==monitor.mode.dmPosition.x && current.dmPosition.y==monitor.mode.dmPosition.y &&
+            current.dmDisplayOrientation==monitor.mode.dmDisplayOrientation && current.dmDisplayFlags==monitor.mode.dmDisplayFlags,
+            "Fullscreen changed a monitor's physical display mode");
+    }
+  }
+
+  void MonitorFullscreenRegression() {
+    std::vector<HMONITOR> handles;
+    Check(EnumDisplayMonitors(nullptr,nullptr,CollectMonitor,reinterpret_cast<LPARAM>(&handles))!=FALSE,
+          "Could not enumerate display monitors");
+    Check(!handles.empty(),"No monitor was available for fullscreen regression checks");
+    std::vector<MonitorSnapshot> monitors;
+    for (const auto handle : handles) {
+      MonitorSnapshot monitor;
+      monitor.handle=handle;
+      monitor.info.cbSize=sizeof(monitor.info);
+      monitor.mode.dmSize=sizeof(monitor.mode);
+      Check(GetMonitorInfoW(handle,reinterpret_cast<MONITORINFO *>(&monitor.info))!=FALSE,"Could not read monitor geometry");
+      Check(EnumDisplaySettingsExW(monitor.info.szDevice,ENUM_CURRENT_SETTINGS,&monitor.mode,0)!=FALSE,
+            "Could not read the monitor's physical display mode");
+      monitors.push_back(monitor);
+    }
+
+    for (const auto &monitor : monitors) {
+      sf::RenderWindow window(sf::VideoMode({960,600}),"Plaguefront monitor regression checks");
+      WindowManager manager(window,false);
+      const auto pump=[&] {
+        while (const auto event=window.pollEvent())
+          if (const auto *resized=event->getIf<sf::Event::Resized>())
+            manager.OnResized(resized->size);
+      };
+      pump();
+      const auto initial=NativeRectangle(window);
+      const auto &work=monitor.info.rcWork;
+      window.setPosition({static_cast<int>(work.left+(work.right-work.left-(initial.right-initial.left))/2),
+                          static_cast<int>(work.top+(work.bottom-work.top-(initial.bottom-initial.top))/2)});
+      pump();
+      Check(MonitorFromWindow(window.getNativeHandle(),MONITOR_DEFAULTTONEAREST)==monitor.handle,
+            "Test window did not move to the requested monitor");
+      const auto normalRectangle=NativeRectangle(window);
+      const auto normalPosition=window.getPosition();
+      const auto normalSize=window.getSize();
+      Check(normalSize==sf::Vector2u{960,600},"Monitor regression did not start with the requested client size");
+      const sf::Vector2u physicalSize{static_cast<unsigned>(monitor.mode.dmPelsWidth),static_cast<unsigned>(monitor.mode.dmPelsHeight)};
+      manager.SetFullscreenResolution(physicalSize);
+      Check(manager.FullscreenResolution()==physicalSize,"Current monitor's physical resolution was rejected");
+
+      const auto verifyFullscreen=[&] {
+        Check(manager.IsFullscreen(),"Monitor regression did not enter fullscreen");
+        Check(MonitorFromWindow(window.getNativeHandle(),MONITOR_DEFAULTTONEAREST)==monitor.handle,
+              "Fullscreen moved the window to another monitor");
+        Check(SameRectangle(NativeRectangle(window),monitor.info.rcMonitor),
+              "Fullscreen did not exactly cover the selected monitor's native rectangle");
+        const auto style=GetWindowLongPtrW(window.getNativeHandle(),GWL_STYLE);
+        Check((style&(WS_CAPTION|WS_THICKFRAME|WS_BORDER|WS_DLGFRAME))==0,
+              "Fullscreen retained native window borders");
+        Check(!IsWindowVisible(window.getNativeHandle()),"Fullscreen made a hidden window visible");
+        VerifyDisplayModes(monitors);
+      };
+      const auto verifyWindowed=[&](sf::Vector2u size,const RECT &rectangle) {
+        Check(!manager.IsFullscreen(),"Monitor regression did not leave fullscreen");
+        Check(!manager.IsMaximized(),"Normal window returned from fullscreen maximized");
+        Check(window.getSize()==size && manager.WindowedSize()==size,
+              "Leaving fullscreen lost the requested windowed client size");
+        Check(window.getPosition()==normalPosition && SameRectangle(NativeRectangle(window),rectangle),
+              "Leaving fullscreen lost the window's normal position or native rectangle");
+        Check(!IsWindowVisible(window.getNativeHandle()),"Leaving fullscreen made a hidden window visible");
+        VerifyDisplayModes(monitors);
+      };
+
+      Check(manager.ToggleFullscreen() && manager.ApplyPending(),"Could not enter fullscreen on a monitor");
+      pump();
+      verifyFullscreen();
+      Check(manager.ToggleFullscreen() && manager.ApplyPending(),"Could not leave fullscreen on a monitor");
+      pump();
+      verifyWindowed(normalSize,normalRectangle);
+
+      Check(manager.Maximize(),"Could not maximize the monitor regression window");
+      pump();
+      Check(manager.IsMaximized(),"Monitor regression window was not maximized");
+      const auto maximizedRectangle=NativeRectangle(window);
+      Check(manager.ToggleFullscreen() && manager.ApplyPending(),"Could not enter fullscreen from maximized");
+      pump();
+      verifyFullscreen();
+      Check(manager.ToggleFullscreen() && manager.ApplyPending(),"Could not leave fullscreen to maximized");
+      pump();
+      Check(manager.IsMaximized(),"Leaving fullscreen lost the maximized state");
+      Check(SameRectangle(NativeRectangle(window),maximizedRectangle),
+            "Leaving fullscreen changed the maximized window rectangle");
+      Check(!IsWindowVisible(window.getNativeHandle()),"Maximized fullscreen return made a hidden window visible");
+      Check(manager.Restore(),"Could not restore the normal window after fullscreen from maximized");
+      pump();
+      verifyWindowed(normalSize,normalRectangle);
+
+      Check(manager.SetResolution({1000,640}),"Could not queue a windowed resolution before fullscreen");
+      Check(manager.SetFullscreen(true) && manager.ApplyPending(),"Combined resolution and fullscreen request failed");
+      pump();
+      verifyFullscreen();
+      Check(manager.WindowedSize()==sf::Vector2u{1000,640},"Fullscreen discarded a pending windowed resolution");
+      Check(manager.SetFullscreen(false) && manager.ApplyPending(),"Could not leave combined resolution/fullscreen request");
+      pump();
+      RECT resizedRectangle=normalRectangle;
+      resizedRectangle.right+=40;
+      resizedRectangle.bottom+=40;
+      verifyWindowed({1000,640},resizedRectangle);
+
+      Check(manager.SetFullscreen(true) && manager.ApplyPending(),"Could not enter fullscreen before loading preferences");
+      pump();
+      verifyFullscreen();
+      manager.LoadPreferences(nlohmann::json{{"fullscreen",false},{"window_width",1040},{"window_height",680},
+                                           {"fullscreen_width",physicalSize.x},{"fullscreen_height",physicalSize.y}});
+      Check(manager.ApplyPending(),"Windowed preferences did not queue a fullscreen exit");
+      pump();
+      resizedRectangle.right+=40;
+      resizedRectangle.bottom+=40;
+      verifyWindowed({1040,680},resizedRectangle);
+      window.close();
+      VerifyDisplayModes(monitors);
+    }
+    std::cout<<"Windows fullscreen monitor regression: "<<monitors.size()<<" monitor(s) checked\n";
+  }
+#endif
   void RotPaletteConfiguration() {
     using Json = nlohmann::json;
     const RotPaletteConfig defaults;
@@ -189,6 +351,9 @@ int main() {
     manager.SetResolution({1280,720}); manager.ApplyPending(); pump();
     manager.LoadPreferences(preferences); manager.ApplyPending(); pump();
     Check(window.getSize()==restored,"Legacy graphic preference keys did not round trip through WindowManager");
+#ifdef _WIN32
+    MonitorFullscreenRegression();
+#endif
 
     // SetView debe actualizar tanto las conversiones de entrada como el dibujo.
     sf::View view({40.f,60.f},{220.f,140.f});

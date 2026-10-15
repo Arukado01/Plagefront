@@ -48,7 +48,8 @@ void CursorManager::Draw(sf::RenderTarget &target, bool ignoreFocus) const {
   sprite.setScale({scale, scale});
   sprite.setPosition(sf::Vector2f(position));
   const auto previousView = target.getView();
-  target.setView(target.getDefaultView());
+  // La vista inicial de SFML conserva el tamaño de creación al maximizar/restaurar.
+  target.setView(sf::View(sf::FloatRect({0.f, 0.f}, sf::Vector2f(target.getSize()))));
   target.draw(sprite);
   target.setView(previousView);
 }

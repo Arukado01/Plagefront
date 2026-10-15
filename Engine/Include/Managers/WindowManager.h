@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <cstdint>
+#include <memory>
 #include <vector>
 #include <nlohmann/json_fwd.hpp>
 
@@ -9,6 +10,7 @@
 class WindowManager {
 public:
   explicit WindowManager(sf::RenderWindow &window, bool visible = true);
+  ~WindowManager();
 
   bool IsFullscreen() const { return fullscreen_; }
   bool SetFullscreen(bool fullscreen);
@@ -38,6 +40,9 @@ private:
   bool fullscreen_{false};
   bool appliedFullscreen_{false};
   bool pending_{false};
+  // Conserva el modo del monitor y la colocación de ventana sin exponer Win32.
+  struct NativeState;
+  std::unique_ptr<NativeState> native_;
   sf::Vector2u windowedSize_;
   sf::Vector2u fullscreenSize_;
   sf::Vector2u desktopSize_;
@@ -47,4 +52,8 @@ private:
   std::vector<sf::Vector2u> fullscreenResolutions_;
 
   void ConfigureWindow();
+  void RefreshMonitor();
+  bool EnterMonitorFullscreen();
+  bool RefreshMonitorFullscreen();
+  void ExitMonitorFullscreen();
 };

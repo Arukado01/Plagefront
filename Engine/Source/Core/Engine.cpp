@@ -250,6 +250,39 @@ void Engine::SmokeWindowTransitions() {
     if (!valid)
       throw std::runtime_error(message);
   };
+  const auto checkCursorOutput = [&] {
+    const auto savedVisibility = context_.cursor.IsVisible();
+    context_.cursor.SetVisible(true);
+    const auto size = window_.getSize();
+    sf::RenderTexture reference(size);
+    sf::Texture captured(size);
+    for (const auto pixel : {sf::Vector2i(size / 4u), sf::Vector2i(size * 3u / 4u)}) {
+      context_.cursor.SetVirtualPosition(context_.renderer.PixelToLogical(pixel));
+      reference.clear(sf::Color::Black);
+      context_.cursor.Draw(reference, true);
+      reference.display();
+      // Captura el back buffer de la misma ventana: su vista predeterminada conserva el tamaño de creación.
+      window_.clear(sf::Color::Black);
+      context_.cursor.Draw(window_, true);
+      captured.update(window_);
+      const auto expected = reference.getTexture().copyToImage();
+      const auto actual = captured.copyToImage();
+      bool matches = true;
+      bool visible = false;
+      const auto *expectedPixels = expected.getPixelsPtr();
+      const auto *actualPixels = actual.getPixelsPtr();
+      // El formato alfa del framebuffer de la ventana puede diferir del de RenderTexture.
+      for (std::size_t offset = 0; offset < static_cast<std::size_t>(size.x) * size.y * 4; offset += 4) {
+        visible |= expectedPixels[offset] || expectedPixels[offset + 1] || expectedPixels[offset + 2];
+        matches &= actualPixels[offset] == expectedPixels[offset] &&
+                   actualPixels[offset + 1] == expectedPixels[offset + 1] &&
+                   actualPixels[offset + 2] == expectedPixels[offset + 2];
+      }
+      check(visible && matches, "Native window cursor pixels differed from current-size render texture");
+    }
+    context_.cursor.SetVirtualPosition({});
+    context_.cursor.SetVisible(savedVisibility);
+  };
   check(!initialFullscreen, "External resize fixture requires windowed mode");
   // El redimensionamiento nativo debe actualizar preferencias, destino y transformación mediante el evento del sistema.
   window_.setSize({1280, 720});
@@ -265,6 +298,21 @@ void Engine::SmokeWindowTransitions() {
     check(std::abs(sfml.x - logical.x) < 0.001f && std::abs(sfml.y - logical.y) < 0.001f,
           "SFML mouse mapping and renderer mapping disagreed after native resize");
   }
+  checkCursorOutput();
+#ifdef _WIN32
+  const auto pumpNativeEvents = [&] {
+    while (const auto event = window_.pollEvent())
+      ProcessWindowEvent(*event);
+    check(context_.renderer.OutputSize() == window_.getSize(), "Native resize did not update the cursor's render output");
+  };
+  check(context_.window.Maximize(), "Native maximize was not applied");
+  pumpNativeEvents();
+  checkCursorOutput();
+  check(context_.window.Restore(), "Native restore was not applied");
+  pumpNativeEvents();
+  check(window_.getSize() == resized, "Native restore did not recover the resized window dimensions");
+  checkCursorOutput();
+#endif
   window_.setSize(initialWindowedSize);
   EngineVisitor{*this}(sf::Event::Resized{window_.getSize()});
   check(window_.getSize() == initialWindowedSize && context_.window.WindowedSize() == initialWindowedSize,
@@ -338,7 +386,7 @@ void Engine::SmokeWindowTransitions() {
   context_.cursor.SetVirtualPosition({});
   context_.cursor.SetVisible(savedVisibility);
   SynchronizeWindowFocus(true);
-  std::cout << "Fullscreen regression: " << checks << " checks passed; both shortcuts, held keys, native focus synchronization, normal cursor pixels and coordinate mappings\n";
+  std::cout << "Fullscreen regression: " << checks << " checks passed; resize/maximize/restore cursor pixels, both shortcuts, held keys, native focus synchronization and coordinate mappings\n";
 }
 
 /** Evento: la ventana perdió el foco (la escena se pausa) */
