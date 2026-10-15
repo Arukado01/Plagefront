@@ -8,6 +8,11 @@
 
 namespace Plaguefront {
   namespace {
+    Point RotateAxial(Point point, int turns) {
+      for (int turn = 0; turn < turns; ++turn)
+        point = {point.x + point.y, -point.x};
+      return point;
+    }
     Point Raw(float q, float r, float elevation) {
       return {ColumnStep * q, ColumnRise * q + RowStep * r - ElevationStep * elevation};
     }
@@ -62,10 +67,11 @@ namespace Plaguefront {
         return EffectType::Fire;
       return EffectType::Slash;
     }
-    int Facing(Hex from, Hex to, int fallback = 0) {
+    int Facing(Hex from, Hex to, int fallback = 0, int rotation = 0) {
       if (from == to)
         return fallback;
-      const auto delta = Raw(static_cast<float>(to.q - from.q), static_cast<float>(to.r - from.r), 0.F);
+      const auto direction = RotateAxial({static_cast<float>(to.q - from.q), static_cast<float>(to.r - from.r)}, rotation);
+      const auto delta = Raw(direction.x, direction.y, 0.F);
       const int side = delta.x == 0.F ? fallback % 2 : (delta.x < 0.F ? 1 : 0);
       return side + (delta.y < 0.F ? 2 : 0);
     }
@@ -178,16 +184,23 @@ namespace Plaguefront {
   Point Camera::Project(Hex pos, float elevation) const {
     return ProjectContinuous(static_cast<float>(pos.q), static_cast<float>(pos.r), elevation);
   }
+  void Camera::SetRotation(int hexTurns) { rotation_ = (hexTurns % 6 + 6) % 6; }
   Point Camera::ProjectContinuous(float q, float r, float elevation) const {
-    const auto raw = Raw(q, r, elevation);
+    const auto rotated = RotateAxial({q, r}, rotation_);
+    const auto raw = Raw(rotated.x, rotated.y, elevation);
     return {origin_.x + pan_.x + raw.x * static_cast<float>(zoom_),
             origin_.y + pan_.y + raw.y * static_cast<float>(zoom_)};
+  }
+  float Camera::Depth(Hex pos) const { return DepthContinuous(static_cast<float>(pos.q), static_cast<float>(pos.r)); }
+  float Camera::DepthContinuous(float q, float r) const {
+    const auto rotated = RotateAxial({q, r}, rotation_);
+    return ColumnRise * rotated.x + RowStep * rotated.y;
   }
   Point Camera::Inverse(Point nativePoint, float elevation) const {
     const float x = (nativePoint.x - origin_.x - pan_.x) / static_cast<float>(zoom_);
     const float y = (nativePoint.y - origin_.y - pan_.y) / static_cast<float>(zoom_) + ElevationStep * elevation;
     const float q = x / ColumnStep;
-    return {q, (y - ColumnRise * q) / RowStep};
+    return RotateAxial({q, (y - ColumnRise * q) / RowStep}, (6 - rotation_) % 6);
   }
   std::array<Point, 6> Camera::Surface(Hex pos, float elevation) const {
     const auto center = Project(pos, elevation);
@@ -199,7 +212,12 @@ namespace Plaguefront {
     return polygon;
   }
   std::optional<Hex> Camera::Pick(const std::vector<Cell> &cells, Point nativePoint) const {
-    const auto sorted = DrawOrder(cells);
+    auto sorted = DrawOrder(cells);
+    if (rotation_ != 0)
+      std::ranges::sort(sorted, [this](const Cell *left, const Cell *right) {
+        return std::tuple{Depth(left->pos), left->pos.q, left->pos.r} <
+               std::tuple{Depth(right->pos), right->pos.q, right->pos.r};
+      });
     for (auto found = sorted.rbegin(); found != sorted.rend(); ++found) {
       const Cell &cell = **found;
       if (InsideTop(nativePoint, Surface(cell.pos, static_cast<float>(cell.height))))
@@ -304,7 +322,7 @@ namespace Plaguefront {
       visual.r = static_cast<float>(a.r) + static_cast<float>(b.r - a.r) * fraction;
       if (track.clip.heights.size() == track.clip.path.size())
         visual.elevation = track.clip.heights[segment] + (track.clip.heights[segment + 1] - track.clip.heights[segment]) * fraction;
-      visual.facing = Facing(a, b, visual.facing);
+      visual.facing = Facing(a, b, visual.facing, rotation_);
       visual.frame = static_cast<int>(std::floor(visual.elapsed / AnimationTiming.walkFrameSeconds)) % AnimationTiming.frames;
     } else {
       const float progress = std::clamp(visual.elapsed / std::max(0.0001F, track.clip.duration), 0.F, 1.F);
@@ -411,7 +429,7 @@ namespace Plaguefront {
                                                                          : AnimationTiming.weaponContactSeconds);
         if (event->chainIndex == 0) {
           wait(actorTrack, start);
-          Queue(actorTrack, {cast ? AnimState::Cast : AnimState::Attack, Duration(cast ? AnimState::Cast : AnimState::Attack), {}, {}, Facing(event->from, event->to, actorTrack.visual.facing)});
+          Queue(actorTrack, {cast ? AnimState::Cast : AnimState::Attack, Duration(cast ? AnimState::Cast : AnimState::Attack), {}, {}, Facing(event->from, event->to, actorTrack.visual.facing, rotation_)});
         }
         wait(victimTrack, impact);
         victimTrack.dead = event->lethal;
@@ -464,7 +482,7 @@ namespace Plaguefront {
         const AnimState state = cast ? AnimState::Cast : AnimState::Attack;
         int facing = track.visual.facing;
         if (!hurt.empty())
-          facing = Facing(actor->pos, hurt.front()->pos, facing);
+          facing = Facing(actor->pos, hurt.front()->pos, facing, rotation_);
         Queue(track, {state, Duration(state), {}, {}, facing});
         if (hint && *hint == Ability::Smoke)
           effects_.push_back({EffectType::Smoke, actor->pos, actor->pos, Height(after, actor->pos), Height(after, actor->pos), 0.F, 0.65F, actorDelay, 0, actor->owner, ""});

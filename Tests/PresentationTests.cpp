@@ -70,6 +70,67 @@ void AffineProjectionAndInverse() {
   Near(v.x-origin.x,0,"V horizontal basis");Near(v.y-origin.y,84,"V vertical basis at 3x");
   Near(camera.Project({0,0},1).y-origin.y,-18,"Height step is six native pixels times zoom");
 }
+void RotatedLargeMapCamera() {
+  const auto match=Match::Create(Config{},"Content/Plaguefront/scenarios/highlands.json",Mode::Local,Difficulty::Normal);
+  Check(match.state.cells.size()==188,"Perspective keeps the complete third scenario");
+  Camera camera;camera.SetRotation(1);camera.Fit(match.state.cells,834,700);
+  const auto origin=camera.Project({0,0});
+  const auto column=camera.Project({1,0}),row=camera.Project({0,1});
+  Near(column.x-origin.x,30.F,"Rotated column X follows the hexagonal lattice");
+  Near(column.y-origin.y,-14.F,"Third-map columns recede diagonally");
+  Near(row.x-origin.x,30.F,"Third-map rows advance diagonally instead of vertically");
+  Near(row.y-origin.y,14.F,"Rotated row Y preserves tile proportions");
+  Near(camera.DepthContinuous(.5F,.25F),-3.5F,"Animated depth uses the same rotated axial basis");
+  for(const Point viewport : {Point{834,700},Point{1140,720},Point{1560,900}}) {
+    camera.FrameAll(match.state.cells,viewport.x,viewport.y);
+    const auto bounds=camera.Bounds(match.state.cells);
+    Check(bounds.left>=0 && bounds.top>=0 && bounds.left+bounds.width<=viewport.x && bounds.top+bounds.height<=viewport.y,
+          "Rotated large-map overview keeps all cells and prop margins visible");
+    for(int zoom=1;zoom<=3;++zoom) {
+      camera.SetZoom(zoom,{viewport.x/2,viewport.y/2});camera.PanBy({-17,23});
+      for(const auto &cell:match.state.cells) {
+        const auto point=camera.Project(cell.pos,static_cast<float>(cell.height));
+        const auto inverse=camera.Inverse(point,static_cast<float>(cell.height));
+        Near(inverse.x,static_cast<float>(cell.pos.q),"Rotated elevated projection round-trips logical Q");
+        Near(inverse.y,static_cast<float>(cell.pos.r),"Rotated elevated projection round-trips logical R");
+        Check(camera.Pick({cell},point)==cell.pos,"Rotated top picking keeps the original logical cell at every zoom");
+      }
+    }
+  }
+  std::vector<Cell> overlap{{{0,0},Terrain::Plain,0},{{1,0},Terrain::Plain,-2}};
+  camera.Fit(overlap);
+  const auto center=camera.Project({0,0});
+  const Point shared{center.x+15.F,center.y};
+  Check(InsideTop(shared,camera.Surface({0,0})) && InsideTop(shared,camera.Surface({1,0},-2.F)),
+        "Rotated picking fixture must overlap both tile surfaces");
+  Check(camera.Depth({1,0})<camera.Depth({0,0}),"Rotated depth reverses the old column ordering");
+  Check(camera.Pick(overlap,shared)==Hex{0,0},"Rotated picking selects the same foreground tile as the renderer");
+  std::ranges::reverse(overlap);
+  Check(camera.Pick(overlap,shared)==Hex{0,0},"Rotated occlusion is independent of cell storage order");
+  camera.SetRotation(-5);Check(camera.Rotation()==1,"Negative hexagonal turns normalize without reflecting the map");
+  camera.SetRotation(6);Check(camera.Rotation()==0,"A full turn restores the original camera orientation");
+  camera.Fit(match.state.cells);
+  const auto standard=camera.Project({0,1}),zero=camera.Project({0,0});
+  Near(standard.x-zero.x,0.F,"The first two maps keep their original projection");
+  Near(standard.y-zero.y,28.F,"The original row projection remains unchanged");
+}
+void RotatedUnitFacing() {
+  auto walking=Board();const int walker=Add(walking,0,UnitClass::Rider,{});
+  Ok(walking.BeginActivation(walker));const Match beforeWalk=walking;
+  Ok(walking.Move(walker,{1,0}));
+  AnimationDirector standard,rotated;
+  standard.Reset(beforeWalk);rotated.SetRotation(1);rotated.Reset(beforeWalk);
+  standard.Observe(beforeWalk,walking);rotated.Observe(beforeWalk,walking);
+  Check(standard.VisualFor(walker,*walking.Find(walker)).facing==0,"Original map walking faces its original direction");
+  Check(rotated.VisualFor(walker,*walking.Find(walker)).facing==2,"Rotated map walking faces the projected destination");
+  rotated.Update(1.F);
+  Check(rotated.VisualFor(walker,*walking.Find(walker)).facing==2,"Idle preserves the completed walk's rotated facing");
+  auto combat=Board();const int attacker=Add(combat,0,UnitClass::Saber,{}),victim=Add(combat,1,UnitClass::Lancer,{1,0});
+  Ok(combat.BeginActivation(attacker));const Match beforeAttack=combat;
+  Ok(combat.UseAbility(attacker,Ability::Attack,combat.Find(victim)->pos));
+  rotated.Reset(beforeAttack);rotated.Observe(beforeAttack,combat);
+  Check(rotated.VisualFor(attacker,*combat.Find(attacker)).facing==2,"Rotated attack faces the projected enemy");
+}
 void AnchorAndFit() {
   std::vector<Cell> cells;
   for(int q=-3;q<=3;++q)for(int r=-3;r<=3;++r)if(Distance({}, {q,r})<=3)cells.push_back({{q,r},Terrain::Plain,(q+r+6)%3});
@@ -354,7 +415,9 @@ void OverlapAndGlobalPresentationLifecycle() {
 int main() {
   int groups=0;
   const std::vector<std::pair<const char *,std::function<void()>>> tests{
-    {"affine projection and inverse",AffineProjectionAndInverse},{"anchor zoom and fitted bounds",AnchorAndFit},
+    {"affine projection and inverse",AffineProjectionAndInverse},{"rotated large-map perspective and picking",RotatedLargeMapCamera},
+    {"rotated movement and attack facing",RotatedUnitFacing},
+    {"anchor zoom and fitted bounds",AnchorAndFit},
     {"elevated top picking and painter order",TopPicking},{"idle phase and immutable rules",IdleClockAndImmutability},
     {"weighted movement interpolation",LegalWalkInterpolation},{"move attack damage queue",MoveAttackQueue},
     {"persistent death animation",DeathVisibility},{"spell effects and AI inference",SpellEffectsAndAIInference},

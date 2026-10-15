@@ -101,7 +101,9 @@ namespace Plaguefront {
                     ControlRepeat,
                     ControlMapping,
                     ControlReset,
-                    MaximizeWindow };
+                    MaximizeWindow,
+                    ResolutionSelect,
+                    ResolutionScroll };
   struct CampaignSetup {
     Mode mode;
     Difficulty difficulty;

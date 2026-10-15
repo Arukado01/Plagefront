@@ -139,6 +139,7 @@ namespace Plaguefront {
       const bool mute = muted_, grid = grid_, effects = effects_;
       const float speed = aiDelay_;
       const bool wasFullscreen = ctx.window.IsFullscreen();
+      const auto oldScreen = screen_, oldPrevious = previous_;
       const auto oldWindow = ctx.window.WindowedSize(), oldResolution = ctx.window.Resolution(), oldFullscreenResolution = ctx.window.FullscreenResolution();
       const float actualMaster = audio_.MasterVolume(), actualMusic = audio_.MusicVolume(), actualSounds = audio_.EffectsVolume();
       const auto restore = [&] {
@@ -158,6 +159,10 @@ namespace Plaguefront {
         if (wasFullscreen)
           ctx.window.SetResolution(oldResolution);
         applyDisplay();
+        if (resolutionOpen_)
+          CloseResolutionSelect(false);
+        ChangeScreen(oldScreen);
+        previous_ = oldPrevious;
         std::error_code error;
         std::filesystem::remove(fixture, error);
       };
@@ -213,6 +218,95 @@ namespace Plaguefront {
         require(!ctx.window.IsFullscreen() && ctx.window.OutputSize() == sf::Vector2u{1280, 720} && ctx.window.FullscreenResolution() == remembered,
                 "Smoke: windowed preferences discarded the separately selected fullscreen resolution");
         require(audio_.Muted() && volume_ == 40 && musicVolume_ == 60 && soundVolume_ == 80, "Smoke: windowed graphics reload altered audio preferences");
+        // El select recorre candidatos sin modificar la salida y aplica sólo la opción confirmada.
+        const int selectChecks = checks;
+        ChangeScreen(Screen::Settings);
+        for (const bool fullscreen : {false, true}) {
+          ctx.window.SetFullscreen(fullscreen);
+          applyDisplay();
+          const auto before = ctx.window.Resolution();
+          const auto revision = ctx.window.Revision();
+          const auto click = [&](int action, int value = 0) {
+            RebuildControls();
+            const auto found = std::ranges::find_if(buttons_, [&](const Button &button) { return button.action == action && button.value == value && button.enabled; });
+            require(found != buttons_.end(), "Smoke: select control missing");
+            const auto pixel = ctx.renderer.LogicalToPixel(found->bounds.position + found->bounds.size / 2.f);
+            OnEvent(sf::Event::MouseButtonPressed{sf::Mouse::Button::Left, pixel});
+          };
+          std::filesystem::remove(fixture);
+          click(Resolution);
+          require(resolutionOpen_ && !resolutionOptions_.empty() && ctx.window.Resolution() == before && ctx.window.Revision() == revision,
+                  "Smoke: opening resolution select changed display");
+          require(resolutionFullscreen_ == fullscreen && std::ranges::all_of(buttons_, [](const Button &button) {
+                    return button.action == Resolution || button.action == ResolutionSelect || button.action == ResolutionScroll;
+                  }), "Smoke: resolution select leaked underlying settings controls");
+          if (fullscreen)
+            for (const auto size : resolutionOptions_)
+              require(std::ranges::find(ctx.window.Resolutions(), size) != ctx.window.Resolutions().end(), "Smoke: select offered unsupported fullscreen mode");
+          key(sf::Keyboard::Key::End);
+          require(resolutionOption_ == static_cast<int>(resolutionOptions_.size()) - 1 && resolutionScroll_ + ResolutionVisibleRows >= static_cast<int>(resolutionOptions_.size()),
+                  "Smoke: select did not scroll focused last option into view");
+          key(sf::Keyboard::Key::Home);
+          OnEvent(sf::Event::MouseWheelScrolled{sf::Mouse::Wheel::Vertical, -1.f, {0, 0}});
+          require(resolutionOption_ == std::min(1, static_cast<int>(resolutionOptions_.size()) - 1) && ctx.window.Resolution() == before,
+                  "Smoke: select wheel changed display before confirmation");
+          key(sf::Keyboard::Key::Escape);
+          require(!resolutionOpen_ && screen_ == Screen::Settings && ctx.window.Resolution() == before && !std::filesystem::exists(fixture),
+                  "Smoke: Escape applied or left resolution settings");
+          require(keyboardFocus_ >= 0 && buttons_[keyboardFocus_].action == Resolution, "Smoke: cancelled select lost keyboard focus");
+          click(Resolution);
+          OnEvent(sf::Event::Resized{ctx.window.OutputSize()});
+          require(!resolutionOpen_ && screen_ == Screen::Settings && ctx.window.Resolution() == before && !std::filesystem::exists(fixture),
+                  "Smoke: resizing retained a stale resolution list or committed a candidate");
+          const auto volumeBefore = volume_;
+          RebuildControls();
+          const auto volumeButton = std::ranges::find_if(buttons_, [](const Button &button) { return button.action == Volume; });
+          require(volumeButton != buttons_.end(), "Smoke: volume control missing for outside click");
+          const auto outside = ctx.renderer.LogicalToPixel(volumeButton->bounds.position + volumeButton->bounds.size / 2.f);
+          click(Resolution);
+          OnEvent(sf::Event::MouseButtonPressed{sf::Mouse::Button::Left, outside});
+          require(!resolutionOpen_ && volume_ == volumeBefore && !std::filesystem::exists(fixture), "Smoke: outside select click activated underlying control");
+          click(Resolution);
+          const auto options = resolutionOptions_;
+          int choice = 0;
+          if (fullscreen) {
+            // El runner gráfico oculto puede rechazar cambios físicos de modo: confirma el nativo real.
+            const auto native = std::ranges::find(options, ctx.window.OutputSize());
+            require(native != options.end(), "Smoke: native fullscreen output missing from select");
+            choice = static_cast<int>(native - options.begin());
+          } else {
+            const auto current = std::ranges::find(options, before);
+            const int currentIndex = current == options.end() ? -1 : static_cast<int>(current - options.begin());
+            const int gap = options.size() > 2 ? 2 : 1;
+            for (std::size_t candidate = 0; candidate < options.size(); ++candidate)
+              if (options[candidate] != before && std::abs(static_cast<int>(candidate) - currentIndex) >= gap) {
+                choice = static_cast<int>(candidate);
+                break;
+              }
+            require(options.size() == 1 || options[choice] != before, "Smoke: windowed select fixture must change actual resolution");
+          }
+          MoveResolutionSelect(choice - resolutionOption_);
+          if (fullscreen) {
+            FocusGamepad({0, 1});
+            FocusGamepad({0, -1});
+            require(buttons_[keyboardFocus_].action == ResolutionSelect && buttons_[keyboardFocus_].value == resolutionOption_, "Smoke: controller select focus escaped options");
+            MoveResolutionSelect(choice - resolutionOption_);
+            key(sf::Keyboard::Key::Enter);
+          } else
+            click(ResolutionSelect, choice);
+          require(!resolutionOpen_ && ctx.window.Resolution() == options[choice], "Smoke: selecting resolution did not apply exact chosen option");
+          applyDisplay();
+          require(ctx.window.OutputSize() == options[choice], "Smoke: chosen select resolution did not reach actual output");
+          const auto document = ctx.save.ReadDocument(settingsFile_);
+          const auto widthKey = fullscreen ? "fullscreen_width" : "window_width", heightKey = fullscreen ? "fullscreen_height" : "window_height";
+          require(document && document->at(widthKey) == options[choice].x && document->at(heightKey) == options[choice].y,
+                  "Smoke: select did not persist exact chosen resolution");
+          click(Resolution);
+          ChangeScreen(Screen::Controls);
+          require(!resolutionOpen_, "Smoke: changing settings screen retained select popup");
+          ChangeScreen(Screen::Settings);
+        }
+        std::cout << "Plaguefront resolution select runtime: " << checks - selectChecks << " checks passed; window/fullscreen lists, direct non-adjacent windowed selection, native fullscreen Enter confirmation, scrolling/controller focus, cancellation, outside click and exact saved mode (no physical fullscreen mode change required by hidden runner).\n";
         std::cout << "Plaguefront preferences runtime: isolated audio/fullscreen/windowed round trips passed; fullscreen choice " << remembered.x << 'x' << remembered.y << " survived a windowed start.\n";
       } catch (...) {
         restore();
@@ -457,6 +551,7 @@ namespace Plaguefront {
     } else if (step == 10) {
       previous_ = Screen::Menu;
       ChangeScreen(Screen::Settings);
+      Dispatch({{}, "", Resolution});
     } else if (step == 11) {
       newLocal();
       selected_ = match_->state.units.front().id;
@@ -499,8 +594,21 @@ namespace Plaguefront {
     } else if (step == 12) {
       validateContextFlow();
       validateRoute();
-      prepareRoute();
-      message_ = "Ruta legal prevista: flechas, puntos de paso, coste ponderado y MOV restante. Cancelar no consume la activación.";
+      newLocal();
+      auto &actor = match_->state.units.front();
+      actor.pos = {0, 5};
+      const int id = actor.id;
+      ResetPresentation();
+      selectUnit(id);
+      Dispatch({{}, "", OpenMove});
+      hovered_ = Hex{1, 7};
+      UpdatePreview(hovered_);
+      require(previewPath_ && previewPath_->cells.size() >= 4, "Smoke: terminal arrow fixture needs a multi-cell route");
+      FocusCamera(false);
+      const Point center{world_.getSize().x / 2.f, world_.getSize().y / 2.f};
+      camera_.SetZoom(2, center);
+      camera_.CenterOn({0, 6}, 0, center);
+      message_ = "Ruta legal prevista: una sola punta en el destino, coste ponderado y MOV restante. Cancelar no consume la activación.";
     } else if (step == 13) {
       newLocal();
       selectUnit(match_->state.units.front().id);
@@ -529,6 +637,7 @@ namespace Plaguefront {
       newLocal(2);
       require(match_->state.cells.size() == 188, "Smoke: large scenario did not load explicit 188 cells");
       FocusCamera(true);
+      hovered_.reset();
       message_ = "Los tres pasos · 188 celdas: tres cruces del río, aldeas neutrales y flancos por bosques y ruinas.";
     } else if (step == 17) {
       newLocal();

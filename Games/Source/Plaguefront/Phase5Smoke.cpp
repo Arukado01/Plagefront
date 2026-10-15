@@ -82,6 +82,83 @@ namespace Plaguefront {
       ctx.input.ProcessEvent(sf::Event(event));
       OnEvent(sf::Event(event));
     };
+    auto verifyTreeHover = [&] {
+      const auto pixels = props_->copyToImage();
+      const float originalTime = animationTime_;
+      for (int scenario = 0; scenario < 3; ++scenario) {
+        useMouse();
+        mode_ = Mode::Local;
+        scenario_ = scenario;
+        LoadArmies();
+        BeginGame();
+        auto tree = std::ranges::find_if(match_->state.cells, [](const Cell &cell) { return cell.terrain == Terrain::Forest && cell.building == Building::None; });
+        require(tree != match_->state.cells.end(), "tree hover fixture has no forest in scenario " + std::to_string(scenario));
+        const Cell forest = *tree;
+        Unit occupant = match_->state.units.front();
+        occupant.pos = forest.pos;
+        // Aísla un árbol real del escenario para distinguir el hover de las oclusiones de otras celdas.
+        match_->state.cells = {forest};
+        match_->state.units.clear();
+        match_->state.sources.clear();
+        match_->state.corpses.clear();
+        match_->state.fires.clear();
+        match_->state.globalRemaining = 0;
+        match_->state.weather = Weather::Clear;
+        selected_ = -1;
+        ResetPresentation();
+        for (int zoom = 1; zoom <= 3; ++zoom) {
+          const int frame = (scenario + zoom) % 4;
+          animationTime_ = (frame + .1f) / 5.f;
+          require(camera_.SetZoom(zoom, {}), "tree hover integer zoom rejected");
+          camera_.CenterOn(forest.pos, static_cast<float>(forest.height), {world_.getSize().x / 2.f, (world_.getSize().y + 60.f * zoom) / 2.f});
+          const auto anchor = camera_.Project(forest.pos, static_cast<float>(forest.height));
+          sf::Vector2i leaf{-1, -1};
+          for (int y = 0; y < 12 && leaf.x < 0; ++y)
+            for (int x = 0; x < 64; ++x)
+              if (pixels.getPixel({static_cast<unsigned>(x), static_cast<unsigned>(frame * 80 + y)}).a == 255) {
+                leaf = {x, y};
+                break;
+              }
+          require(leaf.x >= 0, "tree atlas has no opaque upper canopy pixel");
+          const Point leafPoint{std::round(anchor.x) + (leaf.x - 32 + .5f) * zoom, std::round(anchor.y) + (leaf.y - 68 + .5f) * zoom};
+          const sf::Vector2u sample{static_cast<unsigned>(std::floor(leafPoint.x)), static_cast<unsigned>(std::floor(leafPoint.y))};
+          auto hover = [&](Point nativePoint) {
+            const sf::Vector2f logical{BoardOrigin.x + nativePoint.x * WorldScale(), BoardOrigin.y + nativePoint.y * WorldScale()};
+            require(BoardBounds().contains(logical), "tree hover test point is outside the board");
+            ctx.cursor.SetVirtualPosition(logical);
+            hovered_ = PickCell(logical);
+          };
+          auto renderedLeaf = [&] {
+            RenderWorld();
+            return world_.getTexture().copyToImage().getPixel(sample);
+          };
+          ctx.cursor.SetVirtualPosition(sf::Vector2f{4, 4});
+          hovered_.reset();
+          const auto opaque = renderedLeaf();
+          hover(leafPoint);
+          require(!hovered_, "upper canopy must exercise hover beyond the ground hex");
+          const auto faded = renderedLeaf();
+          require(faded != opaque, "empty forest did not fade when cursor crossed its canopy");
+          hover(anchor);
+          require(hovered_ == forest.pos, "tree ground center was not picked");
+          require(renderedLeaf() == faded, "empty forest did not fade when cursor crossed its cell");
+          hover({std::round(anchor.x) - 31.5f * zoom, std::round(anchor.y) - 67.5f * zoom});
+          require(!hovered_, "transparent sprite corner must be beyond the ground hex");
+          require(renderedLeaf() == opaque, "transparent atlas padding incorrectly faded the forest");
+          ctx.cursor.SetVirtualPosition(sf::Vector2f{4, 4});
+          hovered_.reset();
+          require(renderedLeaf() == opaque, "tree opacity did not recover after the cursor left");
+          match_->state.units = {occupant};
+          visuals_.Reset(*match_);
+          require(renderedLeaf() == faded, "occupied forest must fade even without a selected unit");
+          match_->state.units.clear();
+          visuals_.Reset(*match_);
+        }
+      }
+      animationTime_ = originalTime;
+      ctx.cursor.SetVirtualPosition({});
+      std::cout << "Plaguefront tree hover: empty canopy beyond hex, ground cell, transparent padding, leave and unselected occupant passed in three scenarios at zooms 1..3.\n";
+    };
     if (step == 0) {
       resize({1440, 900});
       fresh();
@@ -170,6 +247,7 @@ namespace Plaguefront {
       message_ = "Inventario y menú contextual después del redimensionamiento.";
     } else if (step == 20) {
       resize({1440, 900});
+      verifyTreeHover();
       fresh();
       const auto *unit = match_->Find(selected_);
       const auto pos = unit->pos;

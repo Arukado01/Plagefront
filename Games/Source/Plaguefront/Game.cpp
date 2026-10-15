@@ -104,6 +104,8 @@ namespace Plaguefront {
     }
   }
   void Game::ChangeScreen(Screen screen) {
+    if (resolutionOpen_)
+      CloseResolutionSelect(false);
     if (screen_ != screen)
       audio_.Play(screen == Screen::Handoff ? "handoff" : "menu");
     if (screen_ != screen)
@@ -133,6 +135,10 @@ namespace Plaguefront {
     if (!match_)
       return;
     ++matchRevision_;
+    // El tercer escenario usa columnas alternas que, sin este giro de cámara,
+    // forman un rectángulo frontal. Conserva las coordenadas de reglas/guardado.
+    camera_.SetRotation(match_->state.scenario == "Los tres pasos" ? 1 : 0);
+    visuals_.SetRotation(camera_.Rotation());
     RefreshLayout(true);
     visuals_.Reset(*match_);
     observed_ = *match_;
@@ -568,16 +574,27 @@ namespace Plaguefront {
       displayRevision_ = ctx.window.Revision();
       break;
     case Resolution: {
-      const auto sizes = ctx.window.Resolutions();
-      if (!sizes.empty()) {
-        auto current = std::ranges::find(sizes, ctx.window.Resolution());
-        auto index = current == sizes.end() ? 0u : static_cast<unsigned>((current - sizes.begin() + 1) % sizes.size());
-        ctx.window.SetResolution(sizes[index]);
+      ToggleResolutionSelect();
+      break;
+    }
+    case ResolutionSelect: {
+      if (resolutionOpen_ && resolutionFullscreen_ == ctx.window.IsFullscreen() && b.value >= 0 && b.value < static_cast<int>(resolutionOptions_.size())) {
+        const auto size = resolutionOptions_[b.value];
+        const auto &available = ctx.window.Resolutions();
+        const bool valid = !ctx.window.IsFullscreen() || std::ranges::find(available, size) != available.end();
+        CloseResolutionSelect();
+        if (!valid)
+          break;
+        ctx.window.SetResolution(size);
         SaveSettings();
         displayRevision_ = ctx.window.Revision();
       }
       break;
     }
+    case ResolutionScroll:
+      if (resolutionOpen_)
+        MoveResolutionSelect(b.value);
+      break;
     case CustomAdd:
       if (customBattalion_.size() < 7 && b.value >= 0 && b.value < 7)
         customBattalion_.push_back(static_cast<UnitClass>(b.value));
@@ -721,6 +738,8 @@ namespace Plaguefront {
       ctx.cursor.SetVirtualPosition({});
     if (layoutRevision_ != ctx.renderer.Revision())
       RefreshLayout();
+    if (HandleResolutionEvent(event))
+      return;
     if (const auto *moved = event.getIf<sf::Event::MouseMoved>(); moved && screen_ == Screen::Playing) {
       const auto point = ctx.renderer.PixelToLogical(moved->position);
       hovered_ = PickCell(point);
@@ -844,6 +863,8 @@ namespace Plaguefront {
     }
   }
   void Game::Update() {
+    if (resolutionOpen_ && resolutionFullscreen_ != ctx.window.IsFullscreen())
+      CloseResolutionSelect();
     RefreshLayout();
     if (displayRevision_ != ctx.window.Revision()) {
       displayRevision_ = ctx.window.Revision();

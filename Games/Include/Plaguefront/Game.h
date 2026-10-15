@@ -62,6 +62,10 @@ namespace Plaguefront {
     std::uint64_t layoutRevision_{~std::uint64_t{0}};
     std::optional<Hex> padCell_;
     bool padBoard_{true};
+    bool resolutionOpen_{}, resolutionFullscreen_{};
+    std::vector<sf::Vector2u> resolutionOptions_;
+    int resolutionOption_{}, resolutionScroll_{};
+    static constexpr int ResolutionVisibleRows = 8;
 
   public:
     explicit Game(EngineContext &context);
@@ -107,6 +111,11 @@ namespace Plaguefront {
     void RenderGamepadCursor() const;
     void RenderControls() const;
     void AdjustControls(int action, int value);
+    void ToggleResolutionSelect();
+    void CloseResolutionSelect(bool restoreFocus = true);
+    void MoveResolutionSelect(int delta);
+    bool HandleResolutionEvent(const sf::Event &);
+    void RenderResolutionSelect() const;
     void SmokeGamepad();
     void PrepareGamepadCapture(int);
     void SmokePhase5(int);

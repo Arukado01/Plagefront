@@ -63,6 +63,35 @@ namespace Plaguefront {
       sprite.setColor(color);
       target.draw(sprite);
     }
+    bool TreeSpriteContains(const sf::Texture *texture, int frame, Point position, int zoom, Point cursor) {
+      if (!texture)
+        return false;
+      // Atlas redondea el ancla antes de dibujar: el hover debe usar ese mismo píxel y escala.
+      const int x = static_cast<int>(std::floor((cursor.x - std::round(position.x)) / zoom + 32.f));
+      const int y = static_cast<int>(std::floor((cursor.y - std::round(position.y)) / zoom + 68.f));
+      if (x < 0 || x >= 64 || y < 0 || y >= 80)
+        return false;
+      struct Mask {
+        const sf::Texture *texture{};
+        unsigned handle{};
+        sf::Vector2u size{};
+        std::array<std::uint8_t, 64 * 80 * 4> alpha{};
+      };
+      static Mask mask;
+      if (mask.texture != texture || mask.handle != texture->getNativeHandle() || mask.size != texture->getSize()) {
+        mask.texture = texture;
+        mask.handle = texture->getNativeHandle();
+        mask.size = texture->getSize();
+        mask.alpha.fill(0);
+        if (mask.size.x >= 64 && mask.size.y >= 80 * 4) {
+          const auto pixels = texture->copyToImage();
+          for (unsigned row = 0; row < 80 * 4; ++row)
+            for (unsigned column = 0; column < 64; ++column)
+              mask.alpha[row * 64 + column] = pixels.getPixel({column, row}).a;
+        }
+      }
+      return mask.alpha[(frame * 80 + y) * 64 + x] > 0;
+    }
     sf::Color RotColor(sf::Color color, float opacity = 1.f) {
       color.a = static_cast<std::uint8_t>(std::lround(color.a * std::clamp(opacity, 0.f, 1.f)));
       return color;
@@ -178,16 +207,20 @@ namespace Plaguefront {
     std::vector<Entry> queue;
     queue.reserve(state.cells.size() * 2 + state.units.size());
     for (const auto &cell : state.cells) {
-      queue.push_back({GroundDepth(cell.pos), 0, &cell});
-      queue.push_back({GroundDepth(cell.pos) + 0.5f, 1, &cell});
+      queue.push_back({camera_.Depth(cell.pos), 0, &cell});
+      queue.push_back({camera_.Depth(cell.pos) + 0.5f, 1, &cell});
     }
     for (const auto &unit : state.units) {
       auto visual = visuals_.VisualFor(unit);
       if (visual.visible)
-        queue.push_back({ColumnRise * visual.q + RowStep * visual.r + 1.f, 2, nullptr, &unit, std::move(visual)});
+        queue.push_back({camera_.DepthContinuous(visual.q, visual.r) + 1.f, 2, nullptr, &unit, std::move(visual)});
     }
     std::ranges::sort(queue, [](const Entry &a, const Entry &b) {if(a.depth!=b.depth)return a.depth<b.depth;if(a.kind!=b.kind)return a.kind<b.kind;if(a.cell&&b.cell)return a.cell->pos.q<b.cell->pos.q;return a.unit&&b.unit?a.unit->id<b.unit->id:false; });
     const int environmentFrame = static_cast<int>(animationTime_ * 5) % 4;
+    const auto cursor = ctx.cursor.GetPosition();
+    const bool cursorOnBoard = screen_ == Screen::Playing && BoardBounds().contains(cursor);
+    const float worldScale = WorldScale();
+    const Point worldCursor{(cursor.x - BoardOrigin.x) / worldScale, (cursor.y - BoardOrigin.y) / worldScale};
     for (const auto &entry : queue) {
       if (entry.kind == 0) {
         const Cell &cell = *entry.cell;
@@ -225,26 +258,39 @@ namespace Plaguefront {
           auto found = std::ranges::find(path, cell.pos);
           if (found != path.end()) {
             const auto index = static_cast<std::size_t>(found - path.begin());
+            const bool destination = index > 0 && index + 1 == path.size();
+            Point along{}, across{};
+            const Point tip{p.x + zoom, p.y + zoom};
+            if (destination) {
+              const auto previous = camera_.Project(path[index - 1], static_cast<float>(cell.height));
+              const float dx = p.x - previous.x, dy = p.y - previous.y;
+              const float length = std::max(1.f, std::sqrt(dx * dx + dy * dy));
+              along = {dx / length, dy / length};
+              across = {along.y, -along.x};
+              // El cuerpo se rellena después para que el borde de la base no corte la unión.
+              Poly(world_, {{tip.x + along.x * zoom, tip.y + along.y * zoom},
+                            {tip.x - along.x * 8 * zoom + across.x * 7 * zoom, tip.y - along.y * 8 * zoom + across.y * 7 * zoom},
+                            {tip.x - along.x * 8 * zoom - across.x * 7 * zoom, tip.y - along.y * 8 * zoom - across.y * 7 * zoom}}, {16, 23, 28});
+            }
             for (int direction : {-1, 1})
               if ((direction < 0 && index > 0) || (direction > 0 && index + 1 < path.size())) {
                 const auto next = path[static_cast<std::size_t>(static_cast<int>(index) + direction)];
                 const auto flat = camera_.Project(next, static_cast<float>(cell.height));
                 Point half{(p.x + flat.x) / 2, (p.y + flat.y) / 2};
-                Line(world_, p, half, {16, 23, 28}, 5 * zoom);
-                Line(world_, p, half, Gold, 3 * zoom);
-                if (direction > 0) {
-                  const float dx = half.x - p.x, dy = half.y - p.y;
-                  const float length = std::max(1.f, std::sqrt(dx * dx + dy * dy));
-                  const Point tip{p.x + dx * .72f, p.y + dy * .72f};
-                  for (float side : {-1.f, 1.f})
-                    Line(world_, tip, {tip.x - dx / length * 5 * zoom + side * dy / length * 3 * zoom, tip.y - dy / length * 5 * zoom - side * dx / length * 3 * zoom}, {247, 238, 180}, zoom);
-                }
+                const Point start = destination ? Point{p.x - along.x * 6 * zoom, p.y - along.y * 6 * zoom} : p;
+                Line(world_, start, half, {16, 23, 28}, 5 * zoom);
+                Line(world_, start, half, Gold, 3 * zoom);
               }
             if (index == 1)
               Outline(world_, camera_, cell, {250, 226, 134}, 2, true);
             if (index + 1 == path.size()) {
               Outline(world_, camera_, cell, {250, 226, 134}, 2);
-              RectAt(world_, p.x - 2 * zoom, p.y - 2 * zoom, 4 * zoom, 4 * zoom, Gold);
+              if (destination) {
+                // Una sola punta terminal, unida al cuerpo y con su mismo dorado y borde.
+                Poly(world_, {tip,
+                              {tip.x - along.x * 7 * zoom + across.x * 6 * zoom, tip.y - along.y * 7 * zoom + across.y * 6 * zoom},
+                              {tip.x - along.x * 7 * zoom - across.x * 6 * zoom, tip.y - along.y * 7 * zoom - across.y * 6 * zoom}}, Gold);
+              }
             }
           }
         }
@@ -267,11 +313,15 @@ namespace Plaguefront {
                                                                                             : 5;
         if (prop >= 0) {
           sf::Color tint = sf::Color::White;
+          // La copa sobresale del hexágono: detecta su silueta visible además de la celda de suelo.
+          if (prop == 0 && (game.Occupant(cell.pos) ||
+                            (cursorOnBoard && ((hovered_ && cell.pos == *hovered_) || TreeSpriteContains(props_, environmentFrame, p, zoom, worldCursor)))))
+            tint.a = 100;
           for (const auto &unit : state.units)
             if (unit.Alive() && (unit.id == selected_ || (hovered_ && unit.pos == *hovered_))) {
               auto visual = visuals_.VisualFor(unit);
               auto unitPoint = camera_.ProjectContinuous(visual.q, visual.r, visual.elevation);
-              if (GroundDepth(cell.pos) > ColumnRise * visual.q + RowStep * visual.r && std::abs(unitPoint.x - p.x) < 26 * zoom && unitPoint.y > p.y - 50 * zoom && unitPoint.y < p.y + 3 * zoom) {
+              if (camera_.Depth(cell.pos) > camera_.DepthContinuous(visual.q, visual.r) && std::abs(unitPoint.x - p.x) < 26 * zoom && unitPoint.y > p.y - 50 * zoom && unitPoint.y < p.y + 3 * zoom) {
                 tint.a = 100;
                 break;
               }

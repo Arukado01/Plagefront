@@ -9,6 +9,16 @@ namespace Plaguefront {
   }
 
   void Game::FocusGamepad(sf::Vector2i direction) {
+    if (resolutionOpen_) {
+      if (direction != sf::Vector2i{})
+        MoveResolutionSelect(direction.y < 0 || direction.x < 0 ? -1 : 1);
+      else {
+        const auto option = std::ranges::find_if(buttons_, [&](const Button &button) { return button.action == ResolutionSelect && button.value == resolutionOption_; });
+        if (option != buttons_.end())
+          keyboardFocus_ = static_cast<int>(option - buttons_.begin());
+      }
+      return;
+    }
     if (buttons_.empty())
       return;
     const auto valid = [&](int index) { return index >= 0 && index < static_cast<int>(buttons_.size()) && buttons_[index].enabled; };
@@ -168,7 +178,9 @@ namespace Plaguefront {
       return;
     }
     if (consume(Input::PadAction::Cancel)) {
-      if (screen_ == Screen::Playing) {
+      if (resolutionOpen_)
+        CloseResolutionSelect();
+      else if (screen_ == Screen::Playing) {
         if (tactical_ != TacticalContext::Selection) {
           CancelContext();
           padBoard_ = tactical_ == TacticalContext::Selection;

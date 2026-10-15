@@ -24,6 +24,118 @@ namespace Plaguefront {
       keyboardFocus_ = found == buttons_.end() ? -1 : static_cast<int>(found - buttons_.begin());
     }
   }
+  void Game::ToggleResolutionSelect() {
+    if (resolutionOpen_) {
+      CloseResolutionSelect();
+      return;
+    }
+    if (screen_ != Screen::Settings)
+      return;
+    resolutionOptions_ = ctx.window.Resolutions();
+    const auto current = ctx.window.Resolution();
+    // Un tamaño arrastrado por el usuario también es una opción válida en ventana.
+    if (!ctx.window.IsFullscreen() && std::ranges::find(resolutionOptions_, current) == resolutionOptions_.end()) {
+      resolutionOptions_.push_back(current);
+    }
+    std::ranges::sort(resolutionOptions_, [](sf::Vector2u a, sf::Vector2u b) { return a.x == b.x ? a.y < b.y : a.x < b.x; });
+    if (resolutionOptions_.empty())
+      return;
+    resolutionFullscreen_ = ctx.window.IsFullscreen();
+    resolutionOpen_ = true;
+    const auto selected = std::ranges::find(resolutionOptions_, current);
+    resolutionOption_ = selected == resolutionOptions_.end() ? 0 : static_cast<int>(selected - resolutionOptions_.begin());
+    resolutionScroll_ = 0;
+    MoveResolutionSelect(0);
+  }
+  void Game::CloseResolutionSelect(bool restoreFocus) {
+    resolutionOpen_ = false;
+    resolutionOptions_.clear();
+    keyboardFocus_ = -1;
+    if (restoreFocus) {
+      RebuildControls();
+      const auto button = std::ranges::find_if(buttons_, [](const Button &candidate) { return candidate.action == Resolution; });
+      if (button != buttons_.end())
+        keyboardFocus_ = static_cast<int>(button - buttons_.begin());
+    }
+  }
+  void Game::MoveResolutionSelect(int delta) {
+    if (!resolutionOpen_ || resolutionOptions_.empty())
+      return;
+    resolutionOption_ = std::clamp(resolutionOption_ + delta, 0, static_cast<int>(resolutionOptions_.size()) - 1);
+    const int rows = std::min(ResolutionVisibleRows, static_cast<int>(resolutionOptions_.size()));
+    resolutionScroll_ = std::clamp(resolutionScroll_, std::max(0, resolutionOption_ - rows + 1), resolutionOption_);
+    resolutionScroll_ = std::min(resolutionScroll_, static_cast<int>(resolutionOptions_.size()) - rows);
+    keyboardFocus_ = -1;
+    RebuildControls();
+    const auto focused = std::ranges::find_if(buttons_, [&](const Button &candidate) { return candidate.action == ResolutionSelect && candidate.value == resolutionOption_; });
+    if (focused != buttons_.end())
+      keyboardFocus_ = static_cast<int>(focused - buttons_.begin());
+  }
+  bool Game::HandleResolutionEvent(const sf::Event &event) {
+    if (!resolutionOpen_)
+      return false;
+    if (screen_ != Screen::Settings || resolutionFullscreen_ != ctx.window.IsFullscreen()) {
+      CloseResolutionSelect();
+      return false;
+    }
+    if (event.is<sf::Event::FocusLost>() || event.is<sf::Event::Resized>()) {
+      CloseResolutionSelect();
+      return false;
+    }
+    if (const auto *key = event.getIf<sf::Event::KeyPressed>()) {
+      if (key->code == sf::Keyboard::Key::Escape) {
+        CloseResolutionSelect();
+        return true;
+      }
+      if (key->code == sf::Keyboard::Key::Up || key->code == sf::Keyboard::Key::Down || key->code == sf::Keyboard::Key::Tab) {
+        MoveResolutionSelect(key->code == sf::Keyboard::Key::Up || (key->code == sf::Keyboard::Key::Tab && key->shift) ? -1 : 1);
+        return true;
+      }
+      if (key->code == sf::Keyboard::Key::Home || key->code == sf::Keyboard::Key::End) {
+        MoveResolutionSelect(key->code == sf::Keyboard::Key::Home ? -resolutionOption_ : static_cast<int>(resolutionOptions_.size()) - 1 - resolutionOption_);
+        return true;
+      }
+      if (key->code == sf::Keyboard::Key::PageUp || key->code == sf::Keyboard::Key::PageDown) {
+        MoveResolutionSelect(key->code == sf::Keyboard::Key::PageUp ? -ResolutionVisibleRows : ResolutionVisibleRows);
+        return true;
+      }
+      if ((key->code == sf::Keyboard::Key::Enter || key->code == sf::Keyboard::Key::Space) && !key->alt) {
+        Dispatch({{}, "", ResolutionSelect, resolutionOption_});
+        return true;
+      }
+    }
+    if (const auto *wheel = event.getIf<sf::Event::MouseWheelScrolled>(); wheel && wheel->delta != 0) {
+      MoveResolutionSelect(wheel->delta > 0 ? -1 : 1);
+      return true;
+    }
+    if (const auto *moved = event.getIf<sf::Event::MouseMoved>()) {
+      const auto position = ctx.renderer.PixelToLogical(moved->position);
+      for (std::size_t i = 0; i < buttons_.size(); ++i)
+        if (buttons_[i].action == ResolutionSelect && buttons_[i].bounds.contains(position)) {
+          resolutionOption_ = buttons_[i].value;
+          keyboardFocus_ = static_cast<int>(i);
+          break;
+        }
+    }
+    if (const auto *mouse = event.getIf<sf::Event::MouseButtonPressed>()) {
+      if (mouse->button == sf::Mouse::Button::Right) {
+        CloseResolutionSelect();
+        return true;
+      }
+      if (mouse->button == sf::Mouse::Button::Left) {
+        const auto position = ctx.renderer.PixelToLogical(mouse->position);
+        for (const auto &button : buttons_)
+          if (button.bounds.contains(position)) {
+            Dispatch(button);
+            return true;
+          }
+        // El clic que cierra la lista no activa el control que había debajo.
+        CloseResolutionSelect();
+        return true;
+      }
+    }
+    return false;
+  }
   float Game::WorldScale() const { return static_cast<float>(worldPixelScale_) / ctx.renderer.UiScale(); }
   void Game::RefreshLayout(bool frame) {
     const auto bounds = BoardBounds();

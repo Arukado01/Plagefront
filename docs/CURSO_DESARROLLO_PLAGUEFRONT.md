@@ -1,14 +1,14 @@
 # Curso interactivo de reconstrucción de Plaguefront sobre AwesomeEngine
 
-Construirá Plaguefront desde una copia limpia del motor original. Las trece etapas contienen operaciones concretas, archivos resultantes, compilación y criterios de salida. Las 29 lecciones desarrollan cada sistema; las fichas A/B/C muestran cambios reales del motor y el atlas permite recorrer las llamadas visualmente.
+Construirá Plaguefront desde una copia limpia del motor original. Las catorce etapas y 32 lecciones contienen operaciones concretas, archivos resultantes, compilación y criterios de salida; las fichas A/B/C muestran cambios reales del motor y el atlas permite recorrer las llamadas visualmente. Las últimas lecciones incorporan los ajustes de paleta, ventana y presentación del juego vigente.
 
 La interacción consiste en ejecutar puntos de control, modificar el taller y navegar entre diagramas, código y explicación. Mermaid representa procesos; no ejecuta una partida. Los enlaces Markdown sirven aunque el visor no admita enlaces de nodos. Los SVG ampliables son evidencia local opcional.
 
 ## Método y procedencia
 
-**A** es AwesomeEngine en el commit local `19e1162fe338eb46e9dd0b2c563d3eebfb1572d9`. **C0** es Plaguefront completo antes de los ajustes posteriores de paleta y pantalla completa, conservado byte a byte. **B** son los cambios A→C0 explicados. **C1** es el juego actual con esos ajustes autorizados. Las etapas 0–10 reconstruyen C0 y las etapas 11–12 lo convierten en C1. Los laboratorios de catálogo parten por separado de C0. No se presentan los puntos didácticos como commits históricos.
+**A** es AwesomeEngine en el commit local `19e1162fe338eb46e9dd0b2c563d3eebfb1572d9`. **C0** es Plaguefront completo antes de los ajustes posteriores de paleta y pantalla completa, conservado byte a byte. **B** son los cambios A→C0 explicados. **C1** incorpora esos ajustes iniciales. **C2** identifica aquí el juego vigente: conserva la corrección posterior del cursor al restaurar y de fullscreen por monitor, y añade la orientación del tercer mapa, follaje bajo el cursor, flechas de ruta y selector de resolución. Las etapas 0–10 reconstruyen C0, las etapas 11–12 explican C1 y la etapa 13 completa C2. Los laboratorios de catálogo parten por separado de C0. No se presentan los puntos didácticos como commits históricos.
 
-`$ProyectoActual` es la raíz Git y de dependencias; `$Referencia` es exclusivamente el snapshot C0 de lectura; `$Taller` es la copia donde construirá A→C0→C1; `$Dependencias` contiene los terceros locales bajo `$ProyectoActual`. Los archivos pequeños y el núcleo progresivo aparecen completos. Los módulos gráficos extensos tienen matriz de archivos, bloques y fuente íntegra. No necesita un Plaguefront funcionando en el taller para aprobar 0–6.
+`$ProyectoActual` es la raíz Git y de dependencias; `$Referencia` es exclusivamente el snapshot C0 de lectura; `$Taller` es la copia donde construirá A→C0→C1→C2; `$Dependencias` contiene los terceros locales bajo `$ProyectoActual`. Los archivos pequeños y el núcleo progresivo aparecen completos. Los módulos gráficos extensos tienen matriz de archivos, bloques y fuente íntegra. No necesita un Plaguefront funcionando en el taller para aprobar 0–6.
 
 Las dependencias reales determinan el orden: serialización y fin de ronda entran como infraestructura en 3 y se profundizan en 5/9. Los servicios de ventana, entrada y capturas se incorporan juntos en 1 y se verifican en 8/9. La escena final requiere presentación, audio, gamepad y fixtures; se integran juntos en 7. Los bloques temporales están identificados y no se atribuyen al motor original ni a C.
 
@@ -33,6 +33,7 @@ El [material C0 del curso](../build/reconstruccion-C0.zip) contiene 213 archivos
 | [10. Extensión](#etapa-10) | Reproducir y ampliar C0 | [27](#leccion-27), [28](#leccion-28), [29](#leccion-29) | [arquitectura](#diagrama-1) |
 | [11. Paleta configurable](#etapa-11) | Putrefacción morada por JSON | [30](#leccion-30) | [configuración visual](#diagrama-13) |
 | [12. Pantalla completa](#etapa-12) | Cursor, atajos y sincronización compartidos | [31](#leccion-31) | [secuencia de ventana](#diagrama-14) |
+| [13. Presentación vigente](#etapa-13) | Perspectiva del tercer mapa, follaje al señalar, flecha legible y resolución desplegable | [32](#leccion-32) | [render](#diagrama-10), [entrada](#diagrama-9) |
 
 En cada etapa compruebe la entrada, escriba los archivos, compile y ejecute la prueba antes de avanzar. La revisión de los métodos enlazados acompaña las transferencias de archivos grandes; no se copia el proyecto completo indiscriminadamente.
 
@@ -4369,7 +4370,7 @@ En PixelRenderer.cpp, Atlas es un helper privado al namespace anónimo; su conte
     }
 ```
 
-El rectángulo de atlas selecciona marco; origen ancla pies y posición se redondea a píxeles nativos. La fórmula real de unidad en RenderWorld es `columna=state*8+frame`, `fila=clase+7*owner+14*facing`, marco48×64 y ancla(24,56). No se programa una clase cambiando sólo el PNG. La cola Entry de RenderWorld intercala suelo, props y unidad por profundidad estable; los laterales usan altura pero no son nuevas superficies seleccionables. El follaje sólo atenúa donde tapa selección/consulta.
+El rectángulo de atlas selecciona marco; origen ancla pies y posición se redondea a píxeles nativos. La fórmula real de unidad en RenderWorld es `columna=state*8+frame`, `fila=clase+7*owner+14*facing`, marco48×64 y ancla(24,56). No se programa una clase cambiando sólo el PNG. La cola Entry de RenderWorld intercala suelo, props y unidad por profundidad estable; los laterales usan altura pero no son nuevas superficies seleccionables. En este checkpoint C0 el follaje sólo atenúa donde tapa selección/consulta; la [lección 32](#leccion-32) añade transparencia al pasar el cursor sobre el árbol.
 
 RenderBoard completo aparece al final de PixelRenderer.cpp, después de RenderWorldLabels. El mundo termina con world_.display; el sprite ampliado se coloca antes de HUD/etiquetas a salida:
 
@@ -12341,7 +12342,7 @@ for (const auto destination : destinations) {
 
 Los archivos son [PixelRenderer.cpp](../build/reconstruccion-C0/Games/Source/Plaguefront/PixelRenderer.cpp), [Presentation.cpp](../build/reconstruccion-C0/Games/Source/Plaguefront/Presentation.cpp), [PlaguefrontPresentationTypes.h](../build/reconstruccion-C0/Games/Include/Types/PlaguefrontPresentationTypes.h), [PlaguefrontPresentationConfig.h](../build/reconstruccion-C0/Games/Include/Config/PlaguefrontPresentationConfig.h), [art.json](../build/reconstruccion-C0/Content/Plaguefront/art.json) y [GeneratePixelArt.ps1](../build/reconstruccion-C0/Tools/GeneratePixelArt.ps1). `Game::Start` obtiene las texturas del `ResourceManager` y desactiva su suavizado; `AnimationDirector` produce poses sin SFML; el renderizador las convierte en sprites. El manifiesto describe el contrato, pero el renderizador calcula también índices y anclas explícitamente: editar sólo el JSON no reprograma sus constantes.
 
-`RenderBoard` coloca el sprite de `world_` dentro de `BoardBounds`. `RenderWorld` limpia ese destino nativo, construye una cola de terreno, props y unidades, dibuja las caras elevadas y las superficies y termina con `world_.display()`. La cola usa `GroundDepth` para terreno y posiciones visuales continuas para unidades; ordena por profundidad, tipo y desempates deterministas. Suelo, objeto y tropa no son tres pasadas globales que ignoren las filas: sus entradas se intercalan en profundidad. El follaje que tapa la unidad seleccionada o señalada se atenúa; no se vuelve transparente todo el bosque.
+`RenderBoard` coloca el sprite de `world_` dentro de `BoardBounds`. `RenderWorld` limpia ese destino nativo, construye una cola de terreno, props y unidades, dibuja las caras elevadas y las superficies y termina con `world_.display()`. La cola usa `GroundDepth` para terreno y posiciones visuales continuas para unidades; ordena por profundidad, tipo y desempates deterministas. Suelo, objeto y tropa no son tres pasadas globales que ignoren las filas: sus entradas se intercalan en profundidad. En C0 se atenúa el follaje que tapa la unidad seleccionada o señalada; la [lección 32](#leccion-32) amplía esta condición al árbol bajo el cursor, incluso sin tropa.
 
 La selección del marco de una tropa aparece literalmente así:
 
@@ -12625,11 +12626,11 @@ Si desea construir otro juego sobre AwesomeEngine, use el patrón real de Clicke
 
 **Prueba final del curso.** Localice en el código el recorrido completo entrada→intención→orden `Match`→resultado→instantánea→animación/audio→render→captura y asocie cada tramo con una suite existente. Debe poder explicar qué resultado cambiaría al editar balance para una partida nueva, qué permanece en un guardado y qué preferencias comparte el motor. Ese recorrido permite replicar la arquitectura sin inventar interfaces ni sustituir el juego ya construido.
 
-## Del resultado C0 al juego actual C1
+## Del resultado C0 a los ajustes C1 y C2
 
 [Paleta ampliable](../build/reconstruccion-mermaid-final/23.svg) · [Pantalla completa: general](../build/reconstruccion-mermaid-final/24.svg) · [Eventos](../build/reconstruccion-mermaid-final/25.svg) · [Foco](../build/reconstruccion-mermaid-final/26.svg) · [Frame final](../build/reconstruccion-mermaid-final/27.svg).
 
-Las dos lecciones siguientes se aplican al taller C0 terminado; su snapshot se mantiene de lectura. Los enlaces de fuente de esta parte apuntan al código actual C1. Las ampliaciones de catálogo anteriores se ensayaron en copias independientes y no forman parte de esta migración.
+Las lecciones 30–31 explican la transición inicial C0→C1 y la lección 32 los ajustes posteriores hasta C2. El snapshot C0 se mantiene de lectura. Los bloques y diffs de 30–31 conservan su contexto histórico; sus enlaces de fuente apuntan al árbol vigente, que puede contener las ampliaciones explicadas en 32. Las ampliaciones de catálogo anteriores se ensayaron en copias independientes y no forman parte de esta migración.
 
 <a id="etapa-11"></a>
 <a id="leccion-30"></a>
@@ -13926,5 +13927,112 @@ Las regresiones añadidas ejecutan ProcessWindowEvent y ApplyWindowChanges reale
 No mezcle esta evidencia con las capturas históricas: SaveScreenshot usa Draw(ignoreFocus=true) deliberadamente para capturar una aplicación oculta, y por eso esos PNG anteriores no verificaban el guard de foco. El nuevo test normal cubre ese vacío. Los resultados históricos y este registro C1 conservan sus recuentos propios.
 
 **Comprobación manual pendiente o por registrar:** abra Plaguefront, mueva el ratón sobre menú y celdas elevadas, pulse/suelte F11 y después Alt+Enter en ambos sentidos; mantenga cada tecla y verifique una transición. Haga clic en botones visibles y seleccione la celda bajo la punta, alterne foco, pause/reanude, cambie resolución y cierre normalmente. Conserve partida/selección. Repita fullscreen y pausa en Clicker; en Bounce el cursor personalizado sigue oculto por diseño y aparece en su overlay. Esta secuencia requiere un escritorio interactivo y no se declara realizada por el runner oculto.
+
+<a id="etapa-13"></a>
+<a id="leccion-32"></a>
+
+## Etapa 13 / Lección 32. Orientar el mapa grande y hacer legibles sus controles
+
+**Entrada:** C1 con la paleta configurable y la sincronización inicial de ventana/cursor. **Salida:** C2, con el tercer mapa en perspectiva, árboles que se atenúan al pasar el cursor, una punta ancha al final de cada ruta y resolución desplegable. También se conserva el arreglo posterior del cursor al restaurar y del monitor de fullscreen, que el usuario confirmó funcionando antes de estos cuatro pedidos. C0 y los resultados históricos de las etapas anteriores permanecen como material de reconstrucción.
+
+### 32.1. Conservar la ventana y los píxeles del cursor corregidos
+
+La posición lógica del cursor podía ser correcta y aun así dibujarse desplazada después de maximizar/restaurar. `RenderWindow::getDefaultView()` conserva las dimensiones de creación; usarla como vista física tras el cambio de tamaño aplicaba una escala extra al sprite. En [CursorManager.cpp](../Engine/Source/Managers/CursorManager.cpp), `Draw` conserva la vista anterior, crea una vista de píxeles con el tamaño **actual del destino**, dibuja el cursor y restaura la vista:
+
+```cpp
+const auto previousView = target.getView();
+target.setView(sf::View(sf::FloatRect({0.f, 0.f}, sf::Vector2f(target.getSize()))));
+target.draw(sprite);
+target.setView(previousView);
+```
+
+La conversión física/lógica y el dibujo tienen así el mismo tamaño de salida. Este ajuste complementa el trabajo de foco/visibilidad de la lección 31; ambos son necesarios para que el puntero permanezca visible y alineado.
+
+En Windows, [WindowManager.h](../Engine/Include/Managers/WindowManager.h) y [WindowManager.cpp](../Engine/Source/Managers/WindowManager.cpp) añaden estado nativo por dispositivo. `RefreshMonitor` elige el monitor de la ventana con `MonitorFromWindow`, enumera sus modos y actualiza la resolución fullscreen. `EnterMonitorFullscreen` guarda modo y colocación, aplica `ChangeDisplaySettingsExW` al dispositivo elegido y crea allí una ventana sin bordes; `RefreshMonitorFullscreen` mantiene esa misma pantalla al cambiar resolución. `ExitMonitorFullscreen` restaura el modo original, y al volver a ventana `WINDOWPLACEMENT` recupera su rectángulo normal y estado maximizado. Si el modo pedido no se puede aplicar, se mantiene el modo actual del monitor elegido. Fuera de Windows se conserva la ruta SFML.
+
+### 32.2. Dar perspectiva a Los tres pasos mediante una cámara coherente
+
+Los tres escenarios comparten la base afín de C0. El mapa grande necesitaba una orientación distinta de su distribución axial para que sus pasos no se percibieran de lado. La corrección se hace en presentación, conservando las 188 celdas, alturas, cruces, simetría, fortalezas, unidades y archivos JSON. Un guardado sigue almacenando las coordenadas tácticas originales.
+
+Abra [Presentation.h](../Games/Include/Plaguefront/Presentation.h), [Presentation.cpp](../Games/Source/Plaguefront/Presentation.cpp) y `Game::ResetPresentation` en [Game.cpp](../Games/Source/Plaguefront/Game.cpp). `Camera::SetRotation(int hexTurns)` recibe giros hexagonales de 60°. `Rotation()` permite consultar el estado; `Depth` y `DepthContinuous` obtienen profundidad en esa misma orientación. `ResetPresentation` asigna un paso cuando `match_->state.scenario == "Los tres pasos"` y cero en otro caso, **antes** de `RefreshLayout`. Decide desde la partida cargada, por lo que un borrador de preparación distinto no altera la vista de una partida restaurada.
+
+Para un paso, la transformación es:
+
+```text
+q′ = q + r
+r′ = −q
+x  = O.x + P.x + Z · 30q′
+y  = O.y + P.y + Z · (14q′ + 28r′ − 6h)
+profundidad = 14q′ + 28r′
+```
+
+`Project` y `ProjectContinuous` aplican el giro; `Inverse` lo deshace después de resolver la base afín. `Pick` recorre el orden visual en sentido inverso al dibujo, de delante hacia atrás, y el render usa `Depth/DepthContinuous` tanto para celdas como para unidades animadas y oclusión. `AnimationDirector::SetRotation(camera_.Rotation())` se aplica antes de `Reset` para orientar también los cuerpos al caminar y atacar; su dirección lógica sigue siendo la del modelo. Modificar sólo `Project` dejaría clics, props y direcciones de animación en orientaciones diferentes. `Fit`, `FrameAll`, zoom y pan siguen trabajando sobre las superficies proyectadas. La cámara asigna esta orientación al escenario; no añade un control de giro libre.
+
+**Comprobación práctica.** Abra los tres escenarios y use la vista de conjunto: los dos primeros conservan su encuadre; Los tres pasos muestra los cruces en la nueva orientación. Seleccione superficies elevadas, acerque/aleje y haga pan; el hex bajo la punta debe corresponder al resaltado y a la ruta. Compare un guardado antes/después de recorrer la cámara: las coordenadas del modelo no deben girar.
+
+### 32.3. Atenuar también el árbol bajo el cursor
+
+En `RenderWorld` de [PixelRenderer.cpp](../Games/Source/Plaguefront/PixelRenderer.cpp), el bosque sin edificio (`prop == 0`) pasa a alfa **100 de 255**, aproximadamente 39 % de opacidad, cuando contiene una unidad viva o cuando se señala su celda. La copa sobresale del hexágono; por eso `TreeSpriteContains` comprueba además el píxel visible del sprite bajo el cursor. Se conserva la atenuación anterior de objetos que ocultan a una unidad seleccionada o consultada.
+
+Siga el recorrido `CursorManager::GetPosition` → restar `BoardOrigin` → dividir por `WorldScale` → restar el ancla de dibujo redondeada → dividir por zoom → sumar el origen de atlas `(32,68)`. El marco de árbol mide 64×80; se acepta sólo alfa original mayor que cero. Una máscara en CPU guarda los cuatro marcos y se reconstruye al cambiar la textura, evitando leer la GPU por cada árbol/frame. La detección usa el mismo redondeo y escala que `Atlas`, funciona con el cursor de ratón o virtual y sólo se aplica jugando dentro del tablero.
+
+**Comprobación práctica.** En cada mapa pase el cursor por una celda de bosque vacía y por la copa que queda fuera de su hexágono; el árbol debe atenuarse sin seleccionar una tropa. Pase por un hueco transparente del recurso o fuera del tablero y confirme que no aparece un rectángulo invisible de hover. Repita con zoom 1–3 y con una unidad en la celda. La transparencia revela la superficie; la selección continúa usando `Camera::Pick` sobre el suelo elevado.
+
+### 32.4. Dibujar una sola punta al final de la ruta
+
+La ruta procede de `previewPath_` y tiene **una sola cabeza al final del recorrido**, situada en el centro de la celda de destino y orientada según el último tramo. Los tramos intermedios dibujan únicamente el cuerpo continuo; se retira también el marcador cuadrado final. En `RenderWorld`, calcule los vectores unitarios longitudinal y perpendicular del último tramo y construya dos triángulos mediante `Poly`. El interior mide **12 píxeles nativos de ancho ×7 de largo** y usa el mismo dorado `Gold` del cuerpo; el borde oscuro usa otro triángulo de 14×9 con el mismo color del borde del cuerpo. El trazo de ruta sigue midiendo 3 píxeles, con borde de 5. Todas las medidas se multiplican por `camera_.Zoom()`.
+
+Para que la unión sea continua, dibuje el borde oscuro de la cabeza antes del relleno del cuerpo y el triángulo dorado de la cabeza al final. El borde no debe cruzar el interior dorado como una línea negra entre cuerpo y punta. La cabeza y su contorno deben distinguirse sobre camino, bosque y suelo contaminado. La previsualización mantiene su ruta y coste originales; los contornos del primer paso y del destino conservan su función. **Práctica:** seleccione Mover y pruebe rutas de varias celdas con distintas direcciones y alturas. Debe aparecer una única punta en el destino, sin cabezas intermedias, con el mismo dorado y borde oscuro que el cuerpo. Ejecute después una ruta para comprobar que el movimiento termina en la celda indicada.
+
+La condición `index > 0 && index + 1 == path.size()` identifica la única celda que dibuja la cabeza. El último trazo del cuerpo termina seis píxeles nativos antes del centro, multiplicados por zoom, y se solapa con la base del triángulo para que la punta quede unida sin que el trazo sobresalga por delante.
+
+**Captura de la ruta completa.** En el paso 12 de `SmokeStep`, Saber parte de `(0,5)` y previsualiza el destino `(1,7)` con coste de **3 MOV**. La captura muestra todo el recorrido, su giro y una sola punta terminal, con el mismo dorado y borde oscuro del cuerpo.
+
+![Ruta completa de Saber desde (0,5) hasta (1,7), con una sola punta al final y diseño continuo con el cuerpo](imagenes/ruta-punta-unica.png)
+
+### 32.5. Elegir una resolución directamente en una lista
+
+El botón de C0/C1 avanzaba un tamaño por pulsación. En C2 `GameAction::Resolution` abre/cierra un selector desplegable. `ResolutionSelect` identifica la opción por índice y `ResolutionScroll` desplaza la lista; esos valores son acciones de interfaz, no resoluciones serializadas. Consulte [PlaguefrontGameTypes.h](../Games/Include/Types/PlaguefrontGameTypes.h), [Game.h](../Games/Include/Plaguefront/Game.h), [Contexts.cpp](../Games/Source/Plaguefront/Contexts.cpp), [Game.cpp](../Games/Source/Plaguefront/Game.cpp), [Interface.cpp](../Games/Source/Plaguefront/Interface.cpp) y [Gamepad.cpp](../Games/Source/Plaguefront/Gamepad.cpp).
+
+`ToggleResolutionSelect`, `CloseResolutionSelect`, `MoveResolutionSelect` y `HandleResolutionEvent` administran `resolutionOpen_`, `resolutionFullscreen_`, `resolutionOptions_`, `resolutionOption_` y `resolutionScroll_`. `RenderResolutionSelect` dibuja hasta ocho filas usando la misma geometría para dibujo y clic. Las opciones proceden de `WindowManager::Resolutions()` para el modo activo, ordenadas por ancho y alto; una ventana de tamaño personalizado puede añadir su tamaño actual en el lugar correspondiente. Abrir, recorrer o cancelar la lista no cambia el modo ni las preferencias. Confirmar una opción llama a `SetResolution` y guarda mediante la ruta existente de preferencias; el motor aplica el cambio pendiente entre fotogramas.
+
+| Entrada | Resultado dentro del selector |
+|---|---|
+| Clic en una resolución | Elegir directamente, aplicar y guardar |
+| Rueda o botones ▲/▼ | Recorrer una lista más larga que sus ocho filas visibles |
+| Arriba/Abajo, Tab/Mayús+Tab | Mover la opción enfocada |
+| Inicio/Fin, RePág/AvPág | Ir a un extremo o avanzar por páginas |
+| Enter/Espacio | Confirmar la opción enfocada |
+| Cruceta/stick y Confirmar del mando | Recorrer y confirmar la misma lista |
+| Esc, clic exterior, clic derecho o Cancelar del mando | Cerrar sin aplicar; el clic exterior se consume |
+| F11/cambio de modo o salida de Configuración | Cerrar la lista anterior y evitar opciones del modo equivocado |
+| Pérdida de foco o cambio de tamaño, maximizar/restaurar | Cerrar sin aplicar una opción del tamaño anterior |
+
+**Comprobación práctica.** Entre en Configuración, abra Resolución y elija un tamaño que no sea el siguiente de la lista. Reabra, recorra varias filas y cancele: el tamaño debe permanecer. Repita en fullscreen y regrese a ventana; cada modo conserva sus preferencias y el monitor elegido. Redimensione una ventana manualmente y revise que su tamaño actual puede mostrarse sin obligarlo a recorrer tamaños intermedios.
+
+### 32.6. Verificar C2 sin sustituir la evidencia histórica
+
+Desde el entorno MSVC/Developer PowerShell de la etapa 0, con el árbol CMake ya configurado, compile el árbol vigente y ejecute la matriz completa:
+
+```powershell
+cmake --build build --parallel 1
+ctest --test-dir build --output-on-failure
+```
+
+Para aislar un fallo de cámara, escenario grande o interfaz después de compilar, use:
+
+```powershell
+ctest --test-dir build -R '^(PlaguefrontProjection|PlaguefrontPhase3|PlaguefrontPresentation)$' --output-on-failure
+```
+
+Los grupos `rotated large-map perspective and picking` y `rotated movement and attack facing` de [PresentationTests.cpp](../Tests/PresentationTests.cpp) comprueban proyección/inversa, picking, profundidad y dirección de cuerpos bajo el giro, sin SFML. `verifyTreeHover` en [Phase5Smoke.cpp](../Games/Source/Plaguefront/Phase5Smoke.cpp) compara píxeles reales de un árbol aislado de cada mapa a zoom 1–3: copa vacía fuera del hex, celda, hueco alfa cero, salida del cursor y ocupación sin selección. El selector se valida en [Smoke.cpp](../Games/Source/Plaguefront/Smoke.cpp), `validateSettingsRoundTrip` y paso 2, con navegación, cancelación, elección directa y persistencia aislada. La lectura de la punta de ruta se revisa visualmente; no se presenta como una prueba geométrica automatizada. Los resultados ejecutados de esta entrega se registran en la [referencia, sección 7.7](REFERENCIA_TECNICA_PLAGUEFRONT.md#77-presentación-c2-y-ventana-por-monitor). Los recuentos y capturas de C0/C1 siguen identificando sus propias ejecuciones.
+
+El driver del runner oculto puede rechazar un cambio de modo físico y conservar el actual del monitor elegido. Por eso la regresión de fullscreen valida abrir/elegir/confirmar el modo nativo actual; la de ventana sí exige un cambio real de resolución mediante selección directa. No se utiliza la prueba oculta como certificación de un cambio exclusivo de vídeo en hardware.
+
+**Verificación ejecutada de C2 anterior al ajuste de punta única:** la [matriz completa aprobó 9/9 suites en 41,13 s](../build/presentation-update-tests-final.log). Tras ordenar también los tamaños personalizados y limpiar el hover heredado del fixture del mapa grande, la [compilación](../build/presentation-update-build-verified.log) y la [regresión PlaguefrontPresentation aprobaron 1/1 en 36,38 s](../build/presentation-update-ui-verified.log), con 49 comprobaciones del selector, hover de árboles en los tres mapas a zoom 1–3 y 71 capturas. Estos resultados se conservan como evidencia de aquella versión con cabezas por tramo; la corrección terminal tiene su propia verificación posterior.
+
+**Verificación final de la punta única:** la [compilación de la corrección](../build/route-terminal-arrow-build-final.log) completó correctamente y [PlaguefrontPresentation aprobó 1/1 en 31,92 s totales](../build/route-terminal-arrow-tests-final.log), con 394 comprobaciones de UI, 49 del selector, 85 de ventana, 114 de mando, 4004 de layout, hover en los tres mapas a zoom 1–3 y 71 capturas. La inspección de screen-12 confirmó una ruta completa de 3 MOV con una sola cabeza dorada terminal, el mismo borde oscuro del cuerpo y unión continua sin franja negra.
+
+Las [copias de trabajo](../build/presentation-update-backup/) reúnen fuentes de esta intervención y los dos documentos previos en su subcarpeta `docs`; no son un snapshot completo del motor ni reemplazan C0. Los cambios de presentación no requieren migrar escenarios o guardados.
 
 **Criterio de salida:** compilación y suites pertinentes aprobadas, cursor/política/foco sincronizados, coordenadas iguales a SFML y consumidores conservados; registro separado de cualquier comprobación física pendiente. No se modifican HP, balance, tiempos de ronda, daño ni formatos tácticos.

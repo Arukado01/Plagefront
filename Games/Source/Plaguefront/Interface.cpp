@@ -172,6 +172,25 @@ namespace Plaguefront {
   }
   void Game::RenderPanel() const { RenderTacticalPanel(); }
 
+  void Game::RenderResolutionSelect() const {
+    const float x = UiWidth() / 2.f - 400.f;
+    const auto current = ctx.window.Resolution();
+    const int rows = std::min(ResolutionVisibleRows, static_cast<int>(resolutionOptions_.size()));
+    // La lista se dibuja al final y es la única superficie interactiva mientras está abierta.
+    buttons_.clear();
+    ButtonAt("Resolución: " + std::to_string(current.x) + " × " + std::to_string(current.y) + "  ▴", x, 276, 386, 44, Resolution);
+    Box({{x, 322}, {386, rows * 36.f + 50}}, Panel, Gold);
+    for (int row = 0; row < rows; ++row) {
+      const int index = resolutionScroll_ + row;
+      const auto size = resolutionOptions_[index];
+      ButtonAt(std::string(size == current ? "● " : "○ ") + std::to_string(size.x) + " × " + std::to_string(size.y), x + 6, 328 + row * 36.f, 374, 34, ResolutionSelect, index);
+    }
+    const float footer = 330.f + rows * 36.f;
+    ButtonAt("▲", x + 6, footer, 60, 32, ResolutionScroll, -1, resolutionOption_ > 0);
+    Text(std::to_string(resolutionScroll_ + 1) + "–" + std::to_string(resolutionScroll_ + rows) + " / " + std::to_string(resolutionOptions_.size()), x + 84, footer + 5, 16, Muted);
+    ButtonAt("▼", x + 320, footer, 60, 32, ResolutionScroll, 1, resolutionOption_ + 1 < static_cast<int>(resolutionOptions_.size()));
+  }
+
   void Game::RenderModal() const {
     buttons_.clear();
     Box({{0, -layoutYOffset_}, {UiWidth(), UiHeight()}}, sf::Color{4, 12, 14, 225});
@@ -183,7 +202,7 @@ namespace Plaguefront {
       Text("SONIDO", right, 174, 19, Gold);
       ButtonAt(ctx.window.IsFullscreen() ? "Pantalla completa  ·  F11" : "Modo ventana  ·  F11", x, 218, 386, 44, Fullscreen);
       const auto size = ctx.window.Resolution();
-      ButtonAt("Resolución: " + std::to_string(size.x) + " × " + std::to_string(size.y), x, 276, 386, 44, Resolution);
+      ButtonAt("Resolución: " + std::to_string(size.x) + " × " + std::to_string(size.y) + "  ▾", x, 276, 386, 44, Resolution);
       ButtonAt(std::string("Cuadrícula: ") + (grid_ ? "visible" : "oculta"), x, 334, 386, 44, Grid);
       ButtonAt(std::string("Partículas: ") + (effects_ ? "activadas" : "desactivadas"), x, 392, 386, 44, Effects);
       ButtonAt(std::string("Ritmo de IA: ") + (aiDelay_ < 0.4f ? "rápido" : "pausado"), x, 450, 386, 44, Speed);
@@ -196,6 +215,8 @@ namespace Plaguefront {
       ButtonAt("CONTROLES", x, 670, 386, 44, Controls);
       ButtonAt(ctx.window.IsMaximized() ? "Restaurar ventana" : "Maximizar ventana", right, 670, 386, 44, MaximizeWindow, 0, !ctx.window.IsFullscreen());
       ButtonAt("VOLVER", x, 732, 798, 48, Back);
+      if (resolutionOpen_)
+        RenderResolutionSelect();
       return;
     }
     const float left = UiWidth() / 2 - 340, x = left + 42;

@@ -26,7 +26,7 @@ Consulta del código local de AwesomeEngine y Plaguefront, revisada el **15 de o
 | `Games/Source/Plaguefront/Rules.cpp` | Constructor de balance, geometría, estadísticas efectivas, rutas, visión, combate, activación, captura, economía, ambiente y clima. |
 | `Games/Source/Plaguefront/Persistence.cpp` | `Config::Load`, `Match::Create/Validate/Save/Load`, parsers y escritura de instantáneas. |
 | `Games/Source/Plaguefront/AI.cpp` | `Match::StepAI`, `PositionScore`, `ActionScore` y `Threat`; simula órdenes públicas sobre copias. |
-| `Games/Include/Plaguefront/Presentation.h` | `Camera`, `AnimationDirector`, `GroundDepth`, `DrawOrder`, `InsideTop`, `RotPresentationAt`. |
+| `Games/Include/Plaguefront/Presentation.h` | `Camera` y su orientación/profundidad, `AnimationDirector`, `GroundDepth`, `DrawOrder`, `InsideTop`, `RotPresentationAt`. |
 | `Games/Include/Types/PlaguefrontPresentationTypes.h` | `Point`, `Rect`, `AnimState`, `EffectType`, `UnitVisual`, `VisualEffect`, `RotExposure`. |
 | `Games/Include/Config/PlaguefrontPresentationConfig.h` | Base de proyección, superficie, `AnimationTiming` y `RotVisual`. |
 | `Games/Source/Plaguefront/Presentation.cpp` | Cámara afín, selección elevada, observación de instantáneas, colas de clips y efectos; sin SFML. |
@@ -35,10 +35,10 @@ Consulta del código local de AwesomeEngine y Plaguefront, revisada el **15 de o
 | `Games/Include/Config/PlaguefrontGameConfig.h` | Dimensiones de interfaz y escala externa del mundo. |
 | `Games/Source/Plaguefront/Game.cpp` | `Start/Update/OnEvent`, `Dispatch`, `HandleCell`, `Apply`, `SyncPresentation`, preparación y preferencias. |
 | `Games/Source/Plaguefront/Contexts.cpp` | `SetContext/CancelContext`, `CheckAction`, `PreviewRules`, `UpdatePreview`, layout/cámara y cachés. |
-| `Games/Source/Plaguefront/Interface.cpp` | Texto a resolución de salida, botones y geometría compartida, menú, preparación, configuración y modales. |
+| `Games/Source/Plaguefront/Interface.cpp` | Texto a resolución de salida, botones y geometría compartida, menú, preparación, configuración con resolución desplegable y modales. |
 | `Games/Source/Plaguefront/TacticalPanel.cpp` | Órdenes, habilidades, objetivos, inventario, administración, reclutamiento, tienda, construcción y compra. |
 | `Games/Source/Plaguefront/TacticalOverlay.cpp` | Lista desplazable, estadísticas/HP/MP, barras de captura, etiquetas y alertas ambientales reales. |
-| `Games/Source/Plaguefront/PixelRenderer.cpp` | `RenderBoard/RenderWorld/RenderWorldLabels`, superficies/laterales, profundidad, atlas, rutas, contaminación, efectos y `Skin` de nueve regiones. |
+| `Games/Source/Plaguefront/PixelRenderer.cpp` | `RenderBoard/RenderWorld/RenderWorldLabels`, superficies/laterales, profundidad según cámara, atlas, follaje al señalar, flechas de ruta, contaminación, efectos y `Skin` de nueve regiones. |
 | `Games/Source/Plaguefront/Gamepad.cpp` | `UpdateGamepad`, foco geométrico, cursor hexagonal y `RenderControls/AdjustControls`. |
 | `Games/Include/Plaguefront/Audio.h`, `Games/Source/Plaguefront/Audio.cpp` | `AudioDirector`: manifiesto, música por pantalla, observación y cues temporizados. |
 | `Games/Source/Plaguefront/Smoke.cpp` | `Game::SmokeStep`: 28 estados gráficos originales y regresiones UI/cámara/preferencias. |
@@ -107,7 +107,7 @@ La convención procede de `Games/Include/Clicker.h`, `Games/Source/Clicker.cpp`,
 
 ### 1.4. Auditoría verificable A/B/C0
 
-Esta matriz conserva el resultado previo a los ajustes posteriores de paleta y pantalla completa: su C es el snapshot C0. El juego actual C1 añade las dos correcciones descritas en las nuevas lecciones 30–31; sus cambios y resultados se registran separadamente.
+Esta matriz conserva el resultado previo a los ajustes posteriores de paleta y pantalla completa: su C es el snapshot C0. C1 añade las correcciones descritas en las lecciones 30–31. C2 es el juego vigente e incorpora además el arreglo posterior de restauración/fullscreen por monitor y los cuatro ajustes de presentación de la [lección 32](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-32); sus contratos y verificaciones se registran por separado.
 
 **A** significa el árbol del commit local `19e1162fe338eb46e9dd0b2c563d3eebfb1572d9`; **B**, la diferencia neta entre ese árbol y el working tree; **C**, la implementación vigente inspeccionada. A se recuperó con `git show`/`git ls-tree`, sin descargar otro motor. El historial local prueba esos dos extremos; las integraciones intermedias de Plaguefront no tienen commits propios. Los snapshots de `build` sirven para contrastar fases documentadas, pero no permiten atribuir cada hunk a una fecha o a un commit inexistente. La revisión didáctica actual no vuelve a modificar ese código.
 
@@ -198,15 +198,15 @@ El cambio de escena restaura la política heredada antes de Start y sincroniza c
 | Táctico | Hex{q, r}, s=−q−r; sólo coordenadas existentes en state.cells. |
 | Distancia | (abs(dq)+abs(dr)+abs(dq+dr))/2; vecinos (+1,0),(+1,−1),(0,−1),(−1,0),(−1,+1),(0,+1). |
 | Regular auxiliar | HexToPixel/PixelToHex: x=R√3(q+r/2), y=1.5Rr; no selecciona el mundo elevado actual. |
-| Cámara | x=O.x+P.x+Z·30q; y=O.y+P.y+Z·(14q+28r−6h); zoom entero 1–3. |
+| Cámara | x=O.x+P.x+Z·30q′; y=O.y+P.y+Z·(14q′+28r′−6h); zoom entero 1–3. Frontera/Ciénaga: (q′,r′)=(q,r). Los tres pasos: (q′,r′)=(q+r,−q), giro visual de 60°. |
 | Superficie | (10,−14),(20,0),(10,14),(−10,14),(−20,0),(−10,−14), multiplicados por zoom. |
-| Profundidad | 14q+28r, empate q/r; Pick recorre DrawOrder al revés con altura real. Laterales/props no son superficies seleccionables. |
+| Profundidad | Camera::Depth/DepthContinuous: 14q′+28r′, empate q/r; Pick recorre el orden visual al revés con altura real. GroundDepth/DrawOrder conservan el contrato auxiliar sin giro. Laterales/props no son superficies seleccionables. |
 | Interfaz | UiScale=min(Output.x/reference.x, Output.y/reference.y); LogicalSize=Output/UiScale. |
 | Mundo nativo | WorldScale=worldPixelScale/UiScale; píxel físico ×2 táctico/×1 conjunto, vecino más cercano. |
-| Entrada física | PixelToLogical/LogicalToPixel incluyen centro, rotación y viewport SFML con sus bordes redondeados. |
+| Entrada física | PixelToLogical/LogicalToPixel incluyen centro, rotación y viewport SFML con sus bordes redondeados. CursorManager::Draw usa una vista física creada desde target.getSize(), también tras maximizar/restaurar. |
 | Entrada al tablero | Restar BoardOrigin y dividir WorldScale antes de Camera::Pick; mando usa posición virtual del mismo CursorManager. |
 
-Camera::Fit reserva 24 píxeles laterales, 60 superiores y 25 inferiores. FrameAll escoge máximo zoom entero que cabe, borra pan; si ×1 no cabe lo mantiene y permite recorrer el mapa. SetZoom conserva el ancla con error máximo de medio píxel nativo/eje y PanBy alinea a enteros. La cámara no rota.
+Camera::Fit reserva 24 píxeles laterales, 60 superiores y 25 inferiores. FrameAll escoge máximo zoom entero que cabe, borra pan; si ×1 no cabe lo mantiene y permite recorrer el mapa. SetZoom conserva el ancla con error máximo de medio píxel nativo/eje y PanBy alinea a enteros. SetRotation recibe pasos hexagonales de 60°; Game::ResetPresentation asigna 1 si match_->state.scenario es `Los tres pasos`, y 0 en otro caso, antes de ajustar el layout. La elección usa la partida cargada, no el borrador de preparación. Project, Inverse, Pick y profundidad usan esa misma orientación; AnimationDirector recibe la rotación para los cuerpos al caminar/atacar. Es una orientación fija por escenario; no hay un control de giro libre.
 
 RenderManager::Revision detecta cambios de métricas. RefreshLayout conserva centro/selección; RebuildControls calcula los mismos botones sin dibujar y conserva foco por acción/valor. OnEvent actualiza geometría antes del clic. Resize no recrea Match. Text rasteriza a tamaño físico y aplica escala UI inversa; no amplía letras desde el lienzo pixel art.
 
@@ -369,6 +369,10 @@ Estos campos de Config se cargan por sus nombres exactos en balance.json; la ins
 
 PlaguefrontGameConfig.h define DesignHeight=900, HeaderHeight=72, Margin=16, RosterWidth=212, OrdersWidth=334, BoardOrigin=(244, 88), BottomLogHeight=48, RosterTop=174, RosterStep=58, RosterRowHeight=54, TacticalPixelScale=2, OverviewPixelScale=1. BoardBounds usa ancho UiWidth−608 y alto UiHeight−200. Filas visibles=max (1, int((UiHeight−194−174)/58)).
 
+En RenderWorld, un bosque sin edificio utiliza alfa **100/255** cuando su celda contiene una unidad viva, cuando se señala su celda o cuando el cursor toca un píxel visible de su sprite. TreeSpriteContains transforma el cursor al atlas 64×80 con ancla (32,68), el mismo redondeo y zoom del dibujo, y consulta una máscara alfa de sus cuatro marcos, almacenada en CPU al cambiar de textura. La copa puede recibir hover fuera del hexágono. Se conserva la atenuación de objetos que ocultan una unidad seleccionada o consultada. La comprobación de cursor sólo se activa jugando y dentro del tablero; usa CursorManager tanto para ratón como para posición virtual.
+
+La previsualización de ruta mantiene trazo dorado de **3 píxeles nativos**, con borde oscuro de 5, y **una única cabeza al final del recorrido**, situada en el centro de la celda de destino y orientada según el último tramo. Su triángulo relleno mide **12 de ancho ×7 de largo** y utiliza el mismo `Gold` del cuerpo; el contorno oscuro mide 14×9 y comparte el color del borde del cuerpo. El borde de la cabeza se dibuja antes del relleno del cuerpo, y el triángulo dorado al final, para mantener una unión continua sin una línea oscura atravesada. Todo se multiplica por el zoom entero. Los tramos intermedios no llevan puntas y se elimina el marcador cuadrado final. Esta geometría sólo comunica el destino de previewPath y no altera el coste ni la orden de movimiento.
+
 AnimationTiming: frames8; idleFrameSeconds=.11, walkFrameSeconds=.06, walkCellSeconds=.12, attackSeconds=.45, hurtSeconds=.30, deathSeconds=.65, castSeconds=.60, weaponContactSeconds=.18, spellContactSeconds=.225, chainIntervalSeconds=.18. AudioDirector comparte los contactos/separación de cadena; el tiempo visual nunca avanza una ronda.
 
 RotVisual conserva pulseRadiansPerSecond=2.8 y los conteos sourceSporeCount=7, localSporeCount=2, globalSporeCount=1. En C1 los colores y el alfa proceden de `Content/Config.json → rotPalette`, interpretados por `EngineConfig::ReadRotPalette`. Cada propiedad acepta exactamente cuatro enteros de 0 a 255; si falta o es inválida conserva su respaldo, sin invalidar las otras propiedades.
@@ -452,7 +456,7 @@ Las validaciones finales recorren la instantánea completa. Declarar un parámet
 
 En Frontera/Ciénaga: q=columna−floor(fila/2), r=fila. Ambas tienen fortalezas azules (−2, 4), rojas (8, 4); casas neutrales (2, 2), (2, 4), (4, 4), (4, 6). Apariciones azules [(-2, 4), (0, 3), (-1, 4), (-2, 5), (-1, 5)]; rojas [(8, 4), (8, 3), (7, 4), (8, 5), (7, 5)]. Clases azules [Saber, Archer, Lancer, Rider, Caster]; rojas [Saber, Archer, Berserker, Assassin, Caster].
 
-Los tres pasos: fortalezas (1, 5)/(13, 0); casas neutrales (4, 3), (4, 7), (5, 0), (9, 5), (10, −2), (10, 2). Apariciones azules[(1, 5), (1, 4), (2, 4), (0, 6), (1, 6)]; rojas[(13, 0), (13, 1), (12, 1), (14, −1), (13, −1)]. Ambos ejércitos usan [Saber, Archer, Lancer, Rider, Caster]. Hay tres cruces, cuatro celdas Bridge, bosque/ruinas/colinas y pantano bajo; las pruebas aíslan cada cruce para verificar alternativas.
+Los tres pasos: fortalezas (1, 5)/(13, 0); casas neutrales (4, 3), (4, 7), (5, 0), (9, 5), (10, −2), (10, 2). Apariciones azules[(1, 5), (1, 4), (2, 4), (0, 6), (1, 6)]; rojas[(13, 0), (13, 1), (12, 1), (14, −1), (13, −1)]. Ambos ejércitos usan [Saber, Archer, Lancer, Rider, Caster]. Hay tres cruces, cuatro celdas Bridge, bosque/ruinas/colinas y pantano bajo; las pruebas aíslan cada cruce para verificar alternativas. C2 gira su presentación 60° para dar la misma sensación de perspectiva de los mapas pequeños; estas coordenadas, alturas, conexiones, contenido JSON y formato de guardado se conservan.
 
 | Terreno | Frontera | Ciénaga | Los tres pasos |
 | --- | ---: | ---: | ---: |
@@ -526,7 +530,7 @@ Cadáveres v1 infieren propietario/clase/unitId desde muertos de esa celda todav
 
 ### 5.1. Teclado y ratón
 
-F11 y Alt+Enter pasan por EngineVisitor→EventFullscreenShortcut y la misma operación WindowManager::ToggleFullscreen. Un latch por tecla impide repetir la alternancia mientras se mantenga pulsada; KeyReleased libera el flanco. El evento consumido no confirma menús. ApplyWindowChanges sincroniza tamaño, foco real, vista del cursor y layout antes del frame siguiente. [Corrección y regresión](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-31).
+F11 y Alt+Enter pasan por EngineVisitor→EventFullscreenShortcut y la misma operación WindowManager::ToggleFullscreen. Un latch por tecla impide repetir la alternancia mientras se mantenga pulsada; KeyReleased libera el flanco. El evento consumido no confirma menús. ApplyWindowChanges sincroniza tamaño, foco real, vista del cursor y layout antes del frame siguiente. En Windows, WindowManager elige el monitor de la ventana mediante MonitorFromWindow, aplica el modo a su dispositivo con ChangeDisplaySettingsExW y coloca allí una ventana sin bordes. Al salir restaura el modo del dispositivo y WINDOWPLACEMENT, incluidos posición y estado maximizado. [Sincronización inicial](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-31) y [contrato vigente](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-32).
 
 | Entrada | Acción vigente |
 | --- | --- |
@@ -608,7 +612,25 @@ JSON de preferencias completo válido, adaptable a modos del monitor: `{"grid":t
 
 Content/Config.json arranca el motor con windowTitle=Plaguefront, windowSize=[1440, 900], referenceSize=[1440, 900], minimumWindowSize=[960, 600], windowIcon=Content/Textures/Plaguefront/emblem.png, disableSfmlLogs=true, maximumDeltaTime=.03, globalVolume=100, backgroundColor=[100, 100, 100], cursorRadius=5, cursorSpeed=800, cursorColor=[255, 100, 0], joystickDeadzone=.1. joystickDeadzone continúa leyéndose por compatibilidad, pero el control actual usa GamepadConfig.deadzone y no ese campo heredado; tampoco son parámetros de reglas tácticas.
 
-WindowManager agrega tamaños comunes 1280×720, 1366×768, 1440×900, 1600×900, 1920×1080, 2560×1440, 3840×2160 cuando caben en escritorio, además de actual/escritorio. Fullscreen procede de getFullscreenModes. Guarda posición/tamaño de ventana en memoria para restaurar; la posición no se serializa en settings. Limita render a 60 FPS y desactiva repetición de teclas.
+WindowManager agrega tamaños comunes 1280×720, 1366×768, 1440×900, 1600×900, 1920×1080, 2560×1440, 3840×2160 cuando caben en escritorio, además de actual/escritorio. En Windows, RefreshMonitor consulta los modos del dispositivo de la ventana con EnumDisplaySettingsW antes de entrar en fullscreen; fuera de Windows se conserva getFullscreenModes de SFML. Guarda posición/tamaño y colocación de ventana en memoria para restaurar; la posición no se serializa en settings. Limita render a 60 FPS y desactiva repetición de teclas.
+
+### 5.5. Selector desplegable de resolución
+
+En Configuración, `Resolution` abre/cierra la lista; `ResolutionSelect(value=índice)` confirma una opción concreta y `ResolutionScroll(value=±1)` desplaza la vista. Game conserva opciones, índice, desplazamiento y modo de apertura en `resolutionOptions_`, `resolutionOption_`, `resolutionScroll_`, `resolutionFullscreen_` y `resolutionOpen_`. `RenderResolutionSelect` dibuja hasta ocho filas; `ToggleResolutionSelect`, `CloseResolutionSelect`, `MoveResolutionSelect` y `HandleResolutionEvent` comparten ese estado entre ratón, teclado y mando.
+
+Las opciones corresponden al modo activo de `WindowManager::Resolutions()` y se ordenan por ancho y alto. En ventana puede añadirse el tamaño actual personalizado en el lugar correspondiente. Abrir o recorrer no solicita un cambio: la selección confirmada llama a `SetResolution`, cierra y guarda mediante `SaveSettings`; la aplicación continúa diferida en `ApplyPending`. Configuración conserva los campos de 5.4, sin un formato nuevo de preferencias.
+
+| Entrada del selector | Contrato |
+|---|---|
+| Clic en opción, Enter/Espacio o Confirmar del mando | Confirmar directamente la resolución enfocada |
+| Arriba/Abajo, Tab/Mayús+Tab, cruceta/stick | Recorrer opciones |
+| Inicio/Fin, RePág/AvPág | Extremos o páginas de opciones |
+| Rueda o ▲/▼ | Desplazar la lista |
+| Esc, clic exterior/derecho o Cancelar del mando | Cerrar sin cambiar resolución; consumir clic exterior |
+| Cambio de pantalla o modo fullscreen/F11 | Cerrar la lista anterior |
+| Pérdida de foco o Resized | Cerrar sin aplicar ni guardar la opción pendiente |
+
+[Implementación y práctica](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-32). El selector reemplaza la rotación de un tamaño por pulsación de C0/C1.
 
 ## 6. Recursos y licencias
 
@@ -759,7 +781,9 @@ Alternativa específica de este equipo: `./Tools/BuildLocal.ps1 -Test` localiza 
 
 ### 7.2. Matriz de suites y comandos aislados
 
-| Nombre CTest exacto | Target / ejecutable | Cobertura y resultado vigente |
+Los recuentos siguientes identifican la ejecución histórica de normalización C0; las ampliaciones y la ejecución de C2 se registran en 7.7. Los nombres CTest y targets continúan siendo los comandos válidos para el árbol vigente.
+
+| Nombre CTest exacto | Target / ejecutable | Cobertura base y resultado histórico |
 | --- | --- | --- |
 | PlaguefrontRules | PlaguefrontTests | 18 grupos/550 comprobaciones: geometría, rutas, reglas, habilidades, ambiente, economía, escenarios, guardado e IA |
 | PlaguefrontCampaigns | PlaguefrontCampaignTests | 7campañas y2regresiones,402validaciones integrales tras comandos |
@@ -869,7 +893,44 @@ La inspección visual de phase5-13 y phase5-18 confirma fuente, iconos, esporas,
 
 La comparación [C0→C1](../build/ajustes-integridad-C0-C1.json) registra 17 modificaciones autorizadas y ninguna inesperada; reglas, IA, persistencia táctica, balance, escenarios, PNG/WAV y LICENSE conservan sus bytes.
 
-Las pruebas de modo utilizan ventanas SFML reales y eventos programados. La comprobación física de F11/Alt+Enter en el escritorio, ergonomía del puntero, cambio exclusivo del monitor y una partida humana siguen pendientes; los píxeles del cursor ahora se comprueban con Draw normal, además de las capturas históricas que ignoraban foco.
+Las pruebas de modo de C1 utilizan ventanas SFML reales y eventos programados; sus capturas históricas ignoraban foco y la regresión nueva comprobó Draw normal. La corrección posterior de cursor al restaurar y elección del monitor de fullscreen se explica en 7.7: el usuario confirmó que ambos problemas ya funcionan. Esa confirmación no equivale a una partida humana completa ni a certificar cada combinación de hardware.
+
+### 7.7. Presentación C2 y ventana por monitor
+
+Esta intervención incorpora los cuatro pedidos posteriores a la confirmación del arreglo de ventana. C2 es una etiqueta documental del árbol vigente, sin cambiar versiones de escenarios o guardados. Los snapshots y resultados de C0/C1 se conservan como históricos.
+
+| Cambio | Contrato vigente / archivos de entrada |
+|---|---|
+| Perspectiva del tercer mapa | Camera::SetRotation(1) gira 60° sólo Los tres pasos, elegido desde el escenario de Match en Game::ResetPresentation. Presentation.h/.cpp, Game.cpp y PixelRenderer.cpp comparten proyección, inversa, picking, profundidad y dirección visual al caminar/atacar; JSON y estado táctico conservan sus coordenadas. |
+| Árbol bajo el cursor | PixelRenderer.cpp añade TreeSpriteContains y alfa 100/255 por ocupación viva, hover de celda o silueta del atlas. Mantiene el caso anterior de oclusión de unidades seleccionadas/consultadas. |
+| Flecha terminal única | PixelRenderer.cpp dibuja una sola cabeza 12×7 en el centro del destino, orientada por el último tramo, con el mismo dorado y borde oscuro 14×9 que el cuerpo. Sin puntas intermedias ni cuadrado final; medidas nativas multiplicadas por zoom. |
+| Resolución desplegable | PlaguefrontGameTypes.h, Game.h, Contexts.cpp, Game.cpp, Interface.cpp y Gamepad.cpp añaden apertura, selección directa, desplazamiento y cancelación; SaveSettings conserva el formato de preferencias. |
+| Base de ventana ya confirmada | CursorManager.cpp dibuja en vista física del tamaño actual; WindowManager.h/.cpp elige monitor y restaura modo/colocación nativa en Windows. El usuario confirmó ambos arreglos antes de estos cuatro pedidos. |
+
+`verifyTreeHover` en Phase5Smoke.cpp verifica píxeles de la escena real para los tres escenarios y zoom 1–3, incluida copa vacía fuera del hex, padding alfa 0, salida del puntero y ocupación sin seleccionar. Smoke.cpp (`validateSettingsRoundTrip` y paso 2) comprueba el selector con selección directa, cancelación, desplazamiento, cierre por Resized sin aplicar, lista válida en ventana/fullscreen y escritura aislada de preferencias. Los grupos `rotated large-map perspective and picking` y `rotated movement and attack facing` de PresentationTests.cpp comprueban orientación, inversa, picking, profundidad y cuerpos al caminar/atacar. La legibilidad de la cabeza de flecha requiere inspección visual; no se deduce de un resultado numérico de reglas.
+
+El driver del runner oculto rechazó una solicitud de cambio físico de resolución fullscreen y se conservó el modo del monitor elegido, según el fallback de WindowManager. La regresión fullscreen confirma directamente su modo nativo actual; en ventana sí comprueba un cambio real de tamaño desde la lista. Esto valida el selector y su aplicación diferida, sin certificar una conmutación exclusiva física de vídeo.
+
+Los resultados de esta tabla corresponden a C2 **antes de la corrección de punta terminal única**; se conservan como evidencia de aquella ejecución. La verificación del último ajuste se registra por separado a continuación.
+
+| Verificación C2 previa ejecutada | Resultado | Evidencia |
+|---|---|---|
+| Compilación integrada final | Completada con MSVC Release | [Registro de construcción verificado](../build/presentation-update-build-verified.log) |
+| Matriz CTest completa | **9/9 suites en 41,13 s** | [Resultado y detalle](../build/presentation-update-tests-final.log) |
+| Cámara y animación | 17 grupos / 11654 comprobaciones en PlaguefrontProjection | Mismo registro CTest |
+| Selector e interfaz | 49 comprobaciones del selector y 396 de UI; 71 capturas de Plaguefront | Mismo registro CTest |
+| Layout, follaje y ventana | 4004 comprobaciones de layout, hover en tres mapas a zoom 1–3; EngineManagers: 9596 comprobaciones y dos monitores | Mismo registro CTest |
+| Verificación posterior del orden de opciones y capturas finales | **PlaguefrontPresentation 1/1 en 36,38 s**; conserva las 49 comprobaciones del selector, hover en los tres mapas a zoom 1–3 y 71 capturas | [Interfaz final verificada](../build/presentation-update-ui-verified.log) |
+
+| Verificación final de la punta terminal única | Resultado | Evidencia |
+|---|---|---|
+| Compilación de la corrección | Completada con el ejecutable actualizado | [Construcción final de flecha](../build/route-terminal-arrow-build-final.log) |
+| PlaguefrontPresentation | **1/1 aprobada; 31,88 s de prueba / 31,92 s totales** | [Prueba final de flecha](../build/route-terminal-arrow-tests-final.log) |
+| Cobertura de la regresión | 394 comprobaciones de UI, 49 del selector, 85 de ventana, 114 de mando, 4004 de layout, hover en tres mapas a zoom 1–3 y 71 capturas | Mismo registro de prueba final |
+
+La inspección visual previa de [screen-10](../build/screenshots/screen-10.png) y [screen-16](../build/screenshots/screen-16.png) confirmó lista legible con elección directa y conjunto del mapa grande en perspectiva: el tamaño personalizado 1532×831 aparece entre las opciones de 1440 y 1600 de ancho, y el mapa grande se ve sin una ficha heredada tapando su centro. La nueva inspección de [screen-12](../build/screenshots/screen-12.png), regenerada después de la corrección terminal, confirma la ruta completa de coste 3 MOV con una sola cabeza en el destino, el mismo dorado y borde oscuro del cuerpo y una unión continua sin franja negra. El límite del modo físico del runner se mantiene.
+
+La [lección 32](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-32) explica cada recorrido y sus comprobaciones prácticas. Las [copias de trabajo](../build/presentation-update-backup/) contienen fuentes de esta intervención y los dos documentos previos en `docs`; no constituyen un snapshot completo del motor. El snapshot C0 permanece intacto.
 
 
 ## 8. Diagnóstico y límites
@@ -885,6 +946,9 @@ Las pruebas de modo utilizan ventanas SFML reales y eventos programados. La comp
 | Content/Config.json o PNG/fuente no encontrado | Arrancar Jugar.cmd/desde raíz; en Windows EngineConfig busca Content en ubicación del ejecutable/superiores. Revisar CachedFont/FetchTexture y ruta real. |
 | Segunda petición de recurso faltante parece correcta | ResourceManager sólo inserta tras carga correcta; EngineManagers exige dos fallos consecutivos. No introducir entrada vacía por operator[]. |
 | Clic elige celda distinta tras resize/zoom | Comparar OutputSize, LogicalSize, UiScale, Revision y viewport de RenderManager; luego BoardOrigin, WorldScale, Camera::Pick/Surface/altura. No usar inversa regular. |
+| Clic o profundidad incorrectos sólo en Los tres pasos | Revisar Camera::Rotation()==1 desde ResetPresentation y que Project/Inverse/Pick/Depth/DepthContinuous compartan orientación; las coordenadas de Match permanecen sin giro. |
+| Árbol no se atenúa al pasar por su copa | Comprobar cursor dentro de Playing/BoardBounds, conversión a world, ancla redondeada y TreeSpriteContains sobre alfa del marco; no basta hovered_ porque la copa sobresale del hex. |
+| Selector aplica al recorrer o usa opciones de otro modo | Resolution abre/cierra; sólo ResolutionSelect llama SetResolution/SaveSettings. Revisar cierre por cambio de modo y resolutionFullscreen_; MoveResolutionSelect sólo enfoca/desplaza. |
 | Botón visible no responde o se solapa | Ver pantalla/contexto, bounds, enabled, layoutRevision y RebuildControls antes de OnEvent; comprobar conversión del propio evento, no ratón de otro frame. |
 | Orden deshabilitada incorrectamente | Consultar CheckAction/Result.message y probar comando en copia activada mediante PreviewRules; CanTarget no valida acción consumida. Invalidar caché cuando cambie una condición. |
 | Fuente/cadáver muestra daño antes de tiempo | Inspeccionar round/deathRound/remaining, Distance, rotRadius, LargestSourceGroup, globalRemaining, RotDamageAt y FireDamageAt en ese orden. |
@@ -904,10 +968,10 @@ Guardar un caso mínimo lógico permite usar los ejecutables existentes; el rend
 ### 8.2. Límites comprobados
 
 - La ventana del runner gráfico permanece oculta; render, contexto, texturas, eventos nativos y tamaños son reales. Resize continuo fue programado mediante ventana nativa, sin arrastre humano ni prueba humana de Alt+Tab. Los callbacks de foco sí se ejercitan.
-- El driver emitió `Failed to change display mode for fullscreen` durante transición exclusiva oculta. Se verificaron dimensiones de escritorio, transformación y restauración; no conmutación exclusiva física del monitor.
+- En los runners históricos C0/C1 el driver emitió `Failed to change display mode for fullscreen` durante transición exclusiva oculta. C2 usa en Windows un modo y una ventana sin bordes sobre el dispositivo elegido; su runner oculto también encontró un modo rechazado y conservó el actual. La prueba del selector fullscreen confirma el modo nativo, sin certificar conmutación exclusiva física. El usuario confirmó la corrección de restauración y fullscreen en su equipo antes de C2.
 - No se utilizó mando físico. Faltan identificación/driver, numeración y orientación de ejes/gatillos, deriva, ergonomía y conexión física. Eventos simulados validan lógica y rutas UI, no esas propiedades de hardware.
 - No se realizó partida manual humana completa, estudio competitivo de balance ni evaluación auditiva de mezcla/repetición. Campañas usan rival que pasa; prueban legalidad/progresión, no fuerza contra personas.
-- Cámara usa zoom entero 1–3 y no rota. El mundo conserva píxel físico entero y permite pan si no cabe; no se promete una distribución móvil arbitraria debajo del mínimo 960×600.
+- Cámara usa zoom entero 1–3 y una orientación fija por escenario: 60° en Los tres pasos y 0° en los otros dos. No hay giro libre en los controles. El mundo conserva píxel físico entero y permite pan si no cabe; no se promete una distribución móvil arbitraria debajo del mínimo 960×600.
 - Los cuerpos tienen frente/espalda y espejos, el caballo mantiene perfil lateral; son máscaras2D, no personajes volumétricos con seis direcciones completas. Las habilidades comparten Attack/Cast.
 - Maximize/Restore son nativos sólo en Windows. Compilación/lanzamiento/recursos generados están verificados en Windows MSVC Release; no se certifican Linux, macOS, MinGW ni Debug/F5.
 - Clicker/Bounce preservan lienzo1440×900 estirado en ultrapanorámico; se comprobó API/ciclo/contenido/récords, sin adaptar sus layouts.
@@ -917,9 +981,9 @@ Guardar un caso mínimo lógico permite usar los ejecutables existentes; el rend
 
 ## 9. Índice de capturas
 
-La ejecución final del 15 de octubre de 2026 generó **73 PNG**: 71 de Plaguefront y 2 de consumidores. [Manifest actual con dimensiones, fecha UTC y SHA256](../build/normalizacion-capturas.json). Todas proceden del render real de la aplicación y ScreenshotManager; no ilustraciones externas. Los nombres históricos de archivos permiten localizar el fixture en Smoke.cpp, Phase4Smoke.cpp o Phase5Smoke.cpp.
+La ejecución de normalización del 15 de octubre de 2026 generó **73 PNG**: 71 de Plaguefront y 2 de consumidores. Su [manifest histórico con dimensiones, fecha UTC y SHA256](../build/normalizacion-capturas.json) identifica aquella ejecución C0. Los enlaces de las tablas apuntan a las salidas de `build/screenshots`, que las regresiones posteriores pueden regenerar; no se atribuyen sus bytes vigentes a los hashes antiguos. Todas proceden del render real de la aplicación y ScreenshotManager. Los nombres históricos permiten localizar el fixture en Smoke.cpp, Phase4Smoke.cpp o Phase5Smoke.cpp; la revisión de C2 se registra en 9.5.
 
-Las revisiones visuales documentadas el 14 de octubre inspeccionaron las 21 capturas de reglas/interfaz y luego las 22 adaptables+2 consumidores finales. Se corrigieron fichas que tapaban cabezas, conectores/textos, barras acumuladas, avisos ambientales fuera de margen, icono global ausente, mensaje heredado y retratos sin desplazamiento vertical. La normalización del 15 regenera los mismos fixtures con tokens ejecutables idénticos; sus dimensiones/hashes actuales se registran sin atribuir una nueva sesión humana de juego.
+Las revisiones visuales documentadas el 14 de octubre inspeccionaron las 21 capturas de reglas/interfaz y luego las 22 adaptables+2 consumidores finales. Se corrigieron fichas que tapaban cabezas, conectores/textos, barras acumuladas, avisos ambientales fuera de margen, icono global ausente, mensaje heredado y retratos sin desplazamiento vertical. La normalización del 15 regeneró aquellos fixtures con tokens ejecutables idénticos; sus hashes históricos no representan los ajustes posteriores C1/C2 ni una nueva sesión humana de juego.
 
 ### 9.1. Regresión original:28 capturas
 
@@ -935,13 +999,13 @@ Las revisiones visuales documentadas el 14 de octubre inspeccionaron las 21 capt
 | [screen-7.png](../build/screenshots/screen-7.png) | 1440×900 | Tres fuentes conectadas y peste global |
 | [screen-8.png](../build/screenshots/screen-8.png) | 1440×900 | Casa con captura parcial |
 | [screen-9.png](../build/screenshots/screen-9.png) | 1440×900 | Conquista legal y victoria |
-| [screen-10.png](../build/screenshots/screen-10.png) | 1440×900 | Configuración y audio |
+| [screen-10.png](../build/screenshots/screen-10.png) | 1440×900 | Configuración y audio; en C2 selector de resolución abierto |
 | [screen-11.png](../build/screenshots/screen-11.png) | 1440×900 | Traspaso de mando local |
-| [screen-12.png](../build/screenshots/screen-12.png) | 1440×900 | Previsualización de ruta legal |
+| [screen-12.png](../build/screenshots/screen-12.png) | 1440×900 | Previsualización de ruta legal; contrato vigente: una sola punta terminal dorada con borde oscuro |
 | [screen-13.png](../build/screenshots/screen-13.png) | 1440×900 | Panel de órdenes sin economía |
 | [screen-14.png](../build/screenshots/screen-14.png) | 1440×900 | Reclutamiento y cancelación sin gasto |
 | [screen-15.png](../build/screenshots/screen-15.png) | 1440×900 | Objetivo de Fire sin activar la tropa |
-| [screen-16.png](../build/screenshots/screen-16.png) | 1440×900 | Los tres pasos:188 celdas en conjunto |
+| [screen-16.png](../build/screenshots/screen-16.png) | 1440×900 | Los tres pasos: 188 celdas en conjunto; en C2 giro visual 60° |
 | [screen-17.png](../build/screenshots/screen-17.png) | 1440×900 | Tienda y compra confirmada |
 | [screen-18.png](../build/screenshots/screen-18.png) | 1440×900 | Construcción legal antes de gastar acción |
 | [screen-19.png](../build/screenshots/screen-19.png) | 1440×900 | Inventario de unidad herida |
@@ -1020,6 +1084,16 @@ Los siete estados 12–18 distinguen cadáver inerte, centro activo, máscara lo
 
 Ventana oculta, fullscreen no certificado como cambio exclusivo físico, resize programado, mando simulado y audio silenciado mantienen los límites de sección 8. Los fixtures pueden recolocar unidades para aislar un caso; las órdenes/daño/turnos/conquista se ejecutan por Match. Capturas no sustituyen campaña humana completa ni estudio competitivo.
 
+### 9.5. Revisión de presentación C2
+
+| PNG regenerado | Resultado de la inspección visual |
+|---|---|
+| [screen-10.png](../build/screenshots/screen-10.png) | Selector abierto sobre Configuración, resolución actual visible y opciones de elección directa legibles. |
+| [screen-12.png](../build/screenshots/screen-12.png) | Ruta completa de coste 3 MOV con una sola cabeza terminal, el mismo dorado y borde oscuro del cuerpo y unión continua sin franja negra. |
+| [screen-16.png](../build/screenshots/screen-16.png) | Los tres pasos en conjunto con la nueva orientación; conserva sus 188 celdas. |
+
+El hover de árboles se comprueba comparando píxeles de estados consecutivos en `verifyTreeHover`; un PNG fijo no prueba por sí solo que el árbol cambie al entrar y salir el cursor. Los resultados CTest de esta entrega están en 7.7.
+
 ## 10. Evolución y consolidación
 
 ### 10.1. Historia técnica útil
@@ -1030,7 +1104,7 @@ Los registros originales de desarrollo se redactaron el 14 de octubre de 2026. S
 | --- | --- | --- |
 | Núcleo inicial | AwesomeEngine integrado, reglas/campañas/UI, arte inicial y guardado; entonces alternaba unidades y captura diferida | 3/3suites,2.70s; [registro](../build/final-verification.log),8 capturas iniciales |
 | Presentación y audio iniciales | Cámara(30q,9q+18r−8h), lienzo720×450,672marcos(4poses/2direcciones),7 PNG y42 WAV originales; núcleo protegido | 5/5,3.40s;18 grupos/529 checks reglas,391validaciones,10 grupos/4712proyección,421audio,12 capturas; [registro](../build/phase2-final-verification.log) |
-| Refinamiento y mapa grande | Base actual(30,14)/(0,28)/altura6,188 celdas,2688marcos(8poses/4direcciones), texto a salida, contextos, cámara/ventana | 6/6,6.33s;529reglas,391validaciones,351UI,4712proyección,421audio,5 grupos/7772nuevos,28 capturas; [registro](../build/phase3-final-verification.log) |
+| Refinamiento y mapa grande | Base(30,14)/(0,28)/altura6, entonces sin giro;188 celdas,2688marcos(8poses/4direcciones), texto a salida, contextos, cámara/ventana | 6/6,6.33s;529reglas,391validaciones,351UI,4712proyección,421audio,5 grupos/7772nuevos,28 capturas; [registro](../build/phase3-final-verification.log) |
 | Turnos de ejército y combate | Cambio autorizado de reglas:EndActivation/EndTurn, respuesta, cadenas, fuego, captura porHP, guardado2/migración1, rojo/cuerpos/cursor | 7/7,10.46s;550reglas,402validaciones,4755proyección,7790fase3,436audio,733reglas nuevas, UI347+143+167,49 capturas; [registro](../build/phase4-final-verification.log) |
 | Integración adaptable y mando | Políticas compartidas, fuentes/captura/persistencia en managers, layout en dos ejes, contaminación visible, mando existente, sin cambiar reglas | 9/9,18.55s;6553proyección,3884layout,1470rot,114mandoUI,339managers,178input,15compatibilidad;73 PNG; [registro](../build/phase5-final-verification.log) |
 | Normalización actual | Comentarios españoles de una línea, contratos cotejados, curso29lecciones y tres documentos principales | 9/9 en 17,93 s tras consolidar; tokens ejecutables idénticos y enlaces revisados |

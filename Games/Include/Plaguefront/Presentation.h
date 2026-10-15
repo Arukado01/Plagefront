@@ -22,8 +22,13 @@ namespace Plaguefront {
     // La vista de conjunto amplía el lienzo nativo con escala externa 1 y conserva el zoom entero de la cámara.
     void FrameAll(const std::vector<Cell> &cells, float width, float height);
     void CenterOn(Hex pos, float elevation, Point nativeCenter);
+    // Gira los ejes axiales en pasos de 60 grados sin cambiar el mapa lógico.
+    void SetRotation(int hexTurns);
+    int Rotation() const { return rotation_; }
     Point Project(Hex pos, float elevation = 0.F) const;
     Point ProjectContinuous(float q, float r, float elevation = 0.F) const;
+    float Depth(Hex pos) const;
+    float DepthContinuous(float q, float r) const;
     Point Inverse(Point nativePoint, float elevation = 0.F) const;
     std::array<Point, 6> Surface(Hex pos, float elevation = 0.F) const;
     std::optional<Hex> Pick(const std::vector<Cell> &cells, Point nativePoint) const;
@@ -38,10 +43,12 @@ namespace Plaguefront {
   private:
     Point origin_{243.F, 160.F}, pan_{};
     int zoom_{1};
+    int rotation_{};
   };
 
   class AnimationDirector {
   public:
+    void SetRotation(int hexTurns) { rotation_ = (hexTurns % 6 + 6) % 6; }
     void Reset(const Match &match);
     void Observe(const Match &before, const Match &after, std::optional<Ability> hint = {});
     void Update(float seconds);
@@ -68,9 +75,10 @@ namespace Plaguefront {
     };
     std::map<int, Track> tracks_;
     std::vector<VisualEffect> effects_;
+    int rotation_{};
     static UnitVisual Initial(const Match &match, const Unit &unit);
     void Queue(Track &track, Clip clip);
-    static void Start(Track &track, Clip clip);
-    static void Sample(Track &track);
+    void Start(Track &track, Clip clip);
+    void Sample(Track &track);
   };
 } // espacio de nombres Plaguefront
