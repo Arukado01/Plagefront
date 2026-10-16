@@ -1,4 +1,7 @@
 #include "Plaguefront/Game.h"
+#include "Plaguefront/Weather.h"
+#include "Plaguefront/SpellPresentation.h"
+#include "Plaguefront/UnitPresentation.h"
 #include "Core/EngineConfig.h"
 #include <SFML/Graphics.hpp>
 #include <algorithm>
@@ -9,6 +12,14 @@ namespace Plaguefront {
   namespace {
     const sf::Color Gold{223, 190, 117}, Ink{17, 20, 29}, Panel{29, 33, 42}, Muted{164, 169, 158};
     const std::array<sf::Color, 2> Team{sf::Color{109, 186, 224}, sf::Color{225, 100, 120}};
+    int TerrainVariant(Hex position) {
+      // La variante sólo depende de la casilla lógica: no cambia al animar, mover o girar la cámara.
+      std::uint32_t hash = static_cast<std::uint32_t>(position.q) * 0x8da6b343u ^ static_cast<std::uint32_t>(position.r) * 0xd8163841u;
+      hash ^= hash >> 16;
+      hash *= 0x7feb352du;
+      hash ^= hash >> 15;
+      return static_cast<int>(hash % 4u);
+    }
     template <class X, class Y, class W, class H>
     void RectAt(sf::RenderTarget &target, X x, Y y, W w, H h, sf::Color color) {
       sf::RectangleShape rectangle({static_cast<float>(w), static_cast<float>(h)});
@@ -23,11 +34,10 @@ namespace Plaguefront {
       shape.setFillColor(color);
       target.draw(shape);
     }
-    void Line(sf::RenderTarget &target, Point from, Point to, sf::Color color, int thickness = 1, bool dotted = false) {
+    void AppendLine(sf::VertexArray &points, Point from, Point to, sf::Color color, int thickness = 1, bool dotted = false) {
       int x = static_cast<int>(std::round(from.x)), y = static_cast<int>(std::round(from.y));
       int endX = static_cast<int>(std::round(to.x)), endY = static_cast<int>(std::round(to.y));
       int dx = std::abs(endX - x), sx = x < endX ? 1 : -1, dy = -std::abs(endY - y), sy = y < endY ? 1 : -1, error = dx + dy, step = 0;
-      sf::VertexArray points(sf::PrimitiveType::Points);
       for (;;) {
         if (!dotted || step % 3 != 0)
           for (int ox = 0; ox < thickness; ++ox)
@@ -46,6 +56,10 @@ namespace Plaguefront {
         }
         ++step;
       }
+    }
+    void Line(sf::RenderTarget &target, Point from, Point to, sf::Color color, int thickness = 1, bool dotted = false) {
+      sf::VertexArray points(sf::PrimitiveType::Points);
+      AppendLine(points, from, to, color, thickness, dotted);
       target.draw(points);
     }
     void Outline(sf::RenderTarget &target, const Camera &camera, const Cell &cell, sf::Color color, int thick = 1, bool dotted = false) {
@@ -62,6 +76,66 @@ namespace Plaguefront {
       sprite.setScale({static_cast<float>(scale), static_cast<float>(scale)});
       sprite.setColor(color);
       target.draw(sprite);
+    }
+    struct UnitFrameGeometry {
+      UnitContact contact;
+      UnitLowerBand lowerBand{};
+    };
+    const UnitFrameGeometry *FrameGeometryFor(const sf::Texture *texture, UnitClass type, int owner, AnimState state, int facing, int frame) {
+      if (!texture)
+        return nullptr;
+      const int column = static_cast<int>(state) * 8 + std::clamp(frame, 0, 7), row = static_cast<int>(type) + 7 * owner + 14 * facing;
+      const auto size = texture->getSize();
+      if (column < 0 || row < 0 || static_cast<unsigned>((column + 1) * 48) > size.x || static_cast<unsigned>((row + 1) * 64) > size.y)
+        return nullptr;
+      struct Cache {
+        const sf::Texture *texture{};
+        unsigned handle{};
+        sf::Vector2u size{};
+        std::vector<std::uint8_t> alpha, ready;
+        std::vector<UnitFrameGeometry> frames;
+      };
+      static Cache cache;
+      // El atlas se lee una vez por versión de textura y cada huella se calcula solo al solicitarla.
+      if (cache.texture != texture || cache.handle != texture->getNativeHandle() || cache.size != size) {
+        cache.texture = texture;
+        cache.handle = texture->getNativeHandle();
+        cache.size = size;
+        const auto image = texture->copyToImage();
+        const auto *pixels = image.getPixelsPtr();
+        cache.alpha.resize(static_cast<std::size_t>(size.x) * size.y);
+        for (std::size_t index = 0; index < cache.alpha.size(); ++index)
+          cache.alpha[index] = pixels[index * 4 + 3];
+        const auto count = static_cast<std::size_t>(size.x / 48) * (size.y / 64);
+        cache.ready.assign(count, 0);
+        cache.frames.assign(count, {});
+      }
+      const auto index = static_cast<std::size_t>(row) * (size.x / 48) + column;
+      if (!cache.ready[index]) {
+        std::array<std::uint8_t, 48 * 64> alpha{};
+        for (int y = 0; y < 64; ++y)
+          for (int x = 0; x < 48; ++x)
+            alpha[static_cast<std::size_t>(y * 48 + x)] = cache.alpha[static_cast<std::size_t>(row * 64 + y) * size.x + column * 48 + x];
+        cache.frames[index].contact = UnitContactGeometry(type, state, facing, frame, alpha);
+        cache.frames[index].lowerBand = UnitLowerBandGeometry(alpha);
+        cache.ready[index] = 1;
+      }
+      return &cache.frames[index];
+    }
+    UnitContact ContactFor(const sf::Texture *texture, UnitClass type, int owner, AnimState state, int facing, int frame) {
+      const auto *geometry = FrameGeometryFor(texture, type, owner, state, facing, frame);
+      return geometry ? geometry->contact : UnitContact{};
+    }
+    void ContactShadow(sf::RenderTarget &target, const UnitContact &contact, Point position, int zoom) {
+      if (!contact.valid)
+        return;
+      const float x = position.x + (contact.shadowLeft - 24) * zoom, y = position.y + (contact.shadowTop - 56) * zoom;
+      const int coreRows = contact.shadowHeight - 1;
+      for (int row = 0; row < coreRows; ++row) {
+        const int inset = coreRows > 1 && row == 0 ? 2 : 0;
+        RectAt(target, x + inset * zoom, y + row * zoom, (contact.shadowWidth - inset * 2) * zoom, zoom, {10, 15, 24, 90});
+      }
+      RectAt(target, x + 2 * zoom, y + coreRows * zoom, (contact.shadowWidth - 4) * zoom, zoom, {10, 15, 24, 45});
     }
     bool TreeSpriteContains(const sf::Texture *texture, int frame, Point position, int zoom, Point cursor) {
       if (!texture)
@@ -103,9 +177,30 @@ namespace Plaguefront {
       const auto top = camera.Surface(cell.pos, static_cast<float>(cell.height));
       const auto p = camera.Project(cell.pos, static_cast<float>(cell.height));
       const float pulse = .5f + .5f * std::sin(elapsed * RotVisual.pulseRadiansPerSecond + cell.pos.q * .47f + cell.pos.r * .31f);
-      // Dibuja una sola capa por celda con la misma precedencia local y global que utiliza el daño.
+      // Una sola base cubre cada casilla real y los acentos locales no añaden otro relleno.
       const auto &palette = gConfig.rotPalette;
-      Poly(target, std::vector<Point>(top.begin(), top.end()), RotColor(exposure.local ? palette.localFill : palette.globalFill, .75f + pulse * .25f));
+      auto fill = exposure.global ? palette.globalFill : RotColor(palette.localFill, .75f + pulse * .25f);
+      if (exposure.global)
+        fill.a = static_cast<std::uint8_t>(std::clamp(std::lround(fill.a * (1.9f + .3f * pulse)), 0L, 105L));
+      Poly(target, std::vector<Point>(top.begin(), top.end()), fill);
+      if (exposure.global) {
+        sf::VertexArray texture(sf::PrimitiveType::Points);
+        const int variant = TerrainVariant(cell.pos);
+        const float direction = variant % 2 == 0 ? 1.f : -1.f;
+        const float shift = (variant / 2) * 2.f;
+        auto vein = palette.sourceLight;
+        vein.a = static_cast<std::uint8_t>(std::lround(vein.a * palette.globalFill.a / 255.f * (1.65f + .4f * pulse)));
+        const auto point = [&](float x, float y) { return Point{p.x + (x * direction + shift) * zoom, p.y + y * zoom}; };
+        AppendLine(texture, point(-13, 4), point(-8, 1), vein, zoom);
+        AppendLine(texture, point(-8, 1), point(-3, 2), vein, zoom);
+        AppendLine(texture, point(3, -7), point(7, -4), vein, zoom);
+        AppendLine(texture, point(7, -4), point(12, -4), vein, zoom);
+        auto edge = palette.localEdge;
+        edge.a = static_cast<std::uint8_t>(std::lround(edge.a * palette.globalFill.a / 255.f * (.85f + .25f * pulse)));
+        AppendLine(texture, point(-9, 10), point(-4, 10), edge, zoom);
+        AppendLine(texture, point(10, 5), point(12, 2), edge, zoom);
+        target.draw(texture);
+      }
       if (exposure.local) {
         Outline(target, camera, cell, RotColor(gConfig.rotPalette.sourceShadow, 215.f / 255.f), 2 * zoom);
         Outline(target, camera, cell, RotColor(gConfig.rotPalette.localEdge, .9f + pulse * .1f), zoom);
@@ -212,8 +307,25 @@ namespace Plaguefront {
     }
     for (const auto &unit : state.units) {
       auto visual = visuals_.VisualFor(unit);
-      if (visual.visible)
-        queue.push_back({camera_.DepthContinuous(visual.q, visual.r) + 1.f, 2, nullptr, &unit, std::move(visual)});
+      if (visual.visible) {
+        float depth = camera_.DepthContinuous(visual.q, visual.r) + 1.f;
+        if (visual.state == AnimState::Walk && visual.path.size() > 1) {
+          if (const auto *geometry = FrameGeometryFor(units_, unit.type, unit.owner, visual.state, visual.facing, visual.frame)) {
+            const auto point = SnapUnitPoint(camera_.ProjectContinuous(visual.q, visual.r, visual.elevation));
+            const Rect lowerBounds{point.x - 24 * zoom, point.y - 12 * zoom, static_cast<float>(48 * zoom), static_cast<float>(20 * zoom)};
+            // El suelo vecino puede tocar la banda inferior; una pared ajena más alta conserva su oclusión.
+            for (const auto &cell : state.cells) {
+              const float groundDepth = camera_.Depth(cell.pos);
+              if (groundDepth + .25F <= depth || !UnitWalkSurfaceEligible(visual, cell.pos, static_cast<float>(cell.height), AnimationTiming.walkCellSeconds))
+                continue;
+              const auto surface = camera_.Surface(cell.pos, static_cast<float>(cell.height));
+              if (UnitSurfaceTouchesRect(lowerBounds, surface) && UnitLowerBandTouchesSurface(geometry->lowerBand, geometry->contact, point, zoom, unit.owner, surface))
+                depth = groundDepth + .25F;
+            }
+          }
+        }
+        queue.push_back({depth, 2, nullptr, &unit, std::move(visual)});
+      }
     }
     std::ranges::sort(queue, [](const Entry &a, const Entry &b) {if(a.depth!=b.depth)return a.depth<b.depth;if(a.kind!=b.kind)return a.kind<b.kind;if(a.cell&&b.cell)return a.cell->pos.q<b.cell->pos.q;return a.unit&&b.unit?a.unit->id<b.unit->id:false; });
     const int environmentFrame = static_cast<int>(animationTime_ * 5) % 4;
@@ -236,7 +348,7 @@ namespace Plaguefront {
           for (int band = 6 * zoom; band < extrusion - 2; band += 7 * zoom)
             Line(world_, {a.x + zoom, a.y + band}, {b.x - zoom, b.y + band}, {103, 87, 62, 80}, 1, true);
         }
-        Atlas(world_, tiles_, static_cast<int>(cell.terrain), environmentFrame, 48, 32, {24, 16}, p, zoom);
+        Atlas(world_, tiles_, static_cast<int>(cell.terrain) + 10 * TerrainVariant(cell.pos), environmentFrame, 48, 32, {24, 16}, p, zoom);
         if (cell.terrain == Terrain::Road || cell.terrain == Terrain::Bridge) {
           for (auto neighbor : Neighbors(cell.pos))
             if (const auto *next = game.At(neighbor); next && (next->terrain == Terrain::Road || next->terrain == Terrain::Bridge)) {
@@ -349,12 +461,13 @@ namespace Plaguefront {
           if (corpse.pos == cell.pos) {
             const auto *dead = game.Find(corpse.unitId);
             if (!dead || !visuals_.VisualFor(*dead).visible) {
-              RectAt(world_, p.x - 14 * zoom, p.y - 2 * zoom, 28 * zoom, 5 * zoom, {12, 16, 20, 190});
-              Atlas(world_, units_, static_cast<int>(AnimState::Death) * 8 + 7, static_cast<int>(corpse.type) + 7 * corpse.owner, 48, 64, {24, 56}, p, zoom);
+              const auto point = SnapUnitPoint(p);
+              ContactShadow(world_, ContactFor(units_, corpse.type, corpse.owner, AnimState::Death, 0, 7), point, zoom);
+              Atlas(world_, units_, static_cast<int>(AnimState::Death) * 8 + 7, static_cast<int>(corpse.type) + 7 * corpse.owner, 48, 64, {24, 56}, point, zoom);
             }
           }
         for (const auto &fire : state.fires)
-          if (fire.pos == cell.pos)
+          if (fire.pos == cell.pos && !FireAwaitsContact(fire, visuals_.Effects()))
             Atlas(world_, spellEffects_, 2, environmentFrame, 48, 48, {24, 24}, {p.x, p.y - 5 * zoom}, zoom);
         for (const auto &source : state.sources)
           if (source.remaining > 0 && source.pos == cell.pos) {
@@ -368,9 +481,8 @@ namespace Plaguefront {
       } else {
         const Unit &unit = *entry.unit;
         const auto &visual = entry.visual;
-        auto p = camera_.ProjectContinuous(visual.q, visual.r, visual.elevation);
-        RectAt(world_, p.x - 8 * zoom, p.y + zoom, 16 * zoom, 2 * zoom, {10, 15, 24, 140});
-        RectAt(world_, p.x - 5 * zoom, p.y + 3 * zoom, 10 * zoom, zoom, {10, 15, 24, 100});
+        const auto p = SnapUnitPoint(camera_.ProjectContinuous(visual.q, visual.r, visual.elevation));
+        ContactShadow(world_, ContactFor(units_, unit.type, unit.owner, visual.state, visual.facing, visual.frame), p, zoom);
         sf::Color tint = unit.activated && state.activeUnit != unit.id ? sf::Color{164, 173, 169} : sf::Color::White;
         Atlas(world_, units_, static_cast<int>(visual.state) * 8 + std::clamp(visual.frame, 0, 7), static_cast<int>(unit.type) + 7 * unit.owner + 14 * visual.facing, 48, 64, {24, 56}, p, zoom, tint);
         if (unit.Alive()) {
@@ -385,13 +497,6 @@ namespace Plaguefront {
           if (unit.guard || unit.smoke || unit.pike || unit.marked || unit.slowThroughRound == state.round)
             RectAt(world_, p.x + 10 * zoom, p.y - 18 * zoom, 3 * zoom, 3 * zoom, unit.marked ? sf::Color{226, 126, 101} : sf::Color{177, 186, 222});
         }
-      }
-    }
-    if (state.globalRemaining > 0) {
-      const float width = static_cast<float>(world_.getSize().x), height = static_cast<float>(world_.getSize().y);
-      for (int i = 0; i < 32; ++i) {
-        const float x = std::fmod(i * 47.f + animationTime_ * 5, width), y = std::fmod(i * 37.f + animationTime_ * 2, height);
-        RectAt(world_, x, y, 17 + (i % 4) * 5.f, 1, RotColor(gConfig.rotPalette.spores, .18f));
       }
     }
     // Conserva las señales esenciales sin efectos cosméticos y dibuja las fichas de HP después, en la interfaz.
@@ -427,6 +532,10 @@ namespace Plaguefront {
     }
     for (const auto &effect : visuals_.Effects())
       if (effect.Active()) {
+        if (effect.stagedSpell) {
+          RenderSpellEffect(effect);
+          continue;
+        }
         float t = effect.Progress();
         auto from = camera_.Project(effect.start, effect.startHeight), to = camera_.Project(effect.end, effect.endHeight);
         Point p = to;
@@ -479,11 +588,12 @@ namespace Plaguefront {
       }
     if (effects_) {
       const float width = static_cast<float>(world_.getSize().x), height = static_cast<float>(world_.getSize().y);
-      if (state.weather == Weather::Rain || state.weather == Weather::Storm)
-        for (int i = 0; i < 64; ++i) {
-          float x = std::fmod(i * 83.f, width), y = std::fmod(i * 53.f + animationTime_ * 85.f, height);
-          Line(world_, {x, y}, {x - 2, y + 5}, {140, 162, 184, 90});
-        }
+      if (state.weather == Weather::Rain || state.weather == Weather::Storm) {
+        sf::VertexArray rain(sf::PrimitiveType::Points);
+        for (const auto &drop : RainDrops(width, height, animationTime_, state.weather == Weather::Storm))
+          AppendLine(rain, drop.tail, drop.head, {144, 168, 185, drop.opacity});
+        world_.draw(rain);
+      }
       if (state.weather == Weather::Fog)
         for (int i = 0; i < 24; ++i) {
           float x = std::fmod(i * 47.f + animationTime_ * 3, width), y = std::fmod(45.f + i * 37.f, height);

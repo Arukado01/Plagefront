@@ -266,6 +266,8 @@ namespace Plaguefront {
       require(std::abs(layoutYOffset_) < .001f, "render leaked centered layout offset");
       message_ = "Preparación centrada: los retratos, los textos y los botones comparten el desplazamiento vertical.";
       std::cout << "Plaguefront phase5 layout: " << checks << " checks passed; eleven tactical layouts and nine screens at five resolutions, 24 continuous native resizes, full-screen, maximize/restore, hitboxes and unchanged serialized match.\n";
+      SmokeVisualCorrections();
+      SmokeUnitIntegration();
     }
     if (ctx.input.Device() != Input::Device::Gamepad)
       ctx.cursor.SetPosition({BoardOrigin.x + BoardBounds().size.x * .6f, BoardOrigin.y + BoardBounds().size.y * .62f});

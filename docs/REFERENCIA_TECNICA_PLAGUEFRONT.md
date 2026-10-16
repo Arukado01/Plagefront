@@ -1,6 +1,6 @@
 # Referencia técnica de Plaguefront
 
-Consulta del código local de AwesomeEngine y Plaguefront, revisada el **15 de octubre de 2026**. El [curso](CURSO_DESARROLLO_PLAGUEFRONT.md) desarrolla la construcción y las prácticas; esta referencia concentra contratos, valores, rutas, formatos y evidencias. Las rutas de tablas son relativas a la raíz. Los recursos iniciales preservados no describen el renderizador actual.
+Consulta del código local de AwesomeEngine y Plaguefront, revisada el **16 de octubre de 2026**. El [curso](CURSO_DESARROLLO_PLAGUEFRONT.md) desarrolla la construcción y las prácticas; esta referencia concentra contratos, valores, rutas, formatos y evidencias. Las rutas de tablas son relativas a la raíz. Los recursos iniciales preservados no describen el renderizador actual. La sección 7.8 registra la verificación final de las correcciones visuales y separa sus resultados de los históricos.
 
 - [1. Inventario](#1-inventario)
 - [Auditoría A/B/C y procedencia del motor](#auditoria-abc)
@@ -30,6 +30,9 @@ Consulta del código local de AwesomeEngine y Plaguefront, revisada el **15 de o
 | `Games/Include/Types/PlaguefrontPresentationTypes.h` | `Point`, `Rect`, `AnimState`, `EffectType`, `UnitVisual`, `VisualEffect`, `RotExposure`. |
 | `Games/Include/Config/PlaguefrontPresentationConfig.h` | Base de proyección, superficie, `AnimationTiming` y `RotVisual`. |
 | `Games/Source/Plaguefront/Presentation.cpp` | Cámara afín, selección elevada, observación de instantáneas, colas de clips y efectos; sin SFML. |
+| `Games/Include/Plaguefront/Weather.h` | `RainDrop/RainDrops`: trazos deterministas de lluvia por tamaño nativo y tiempo visual; sin reglas meteorológicas. |
+| `Games/Include/Plaguefront/SpellPresentation.h` | `SpellStage/SpellSample/SampleSpell`: fases normalizadas; `FireAwaitsContact` coordina la visibilidad de incendios recién creados. |
+| `Games/Source/Plaguefront/SpellRenderer.cpp` | `Game::RenderSpellEffect`: preparación, proyectiles, enlaces, impactos y desvanecimiento mediante píxeles y atlas. |
 | `Games/Include/Plaguefront/Game.h` | `Game : Scene`: ciclo y estado privado de interacción/presentación. |
 | `Games/Include/Types/PlaguefrontGameTypes.h` | `GameScreen`, once `TacticalContext`, `GameAction`, `Button`, `CampaignSetup`, `LegalityKey`. |
 | `Games/Include/Config/PlaguefrontGameConfig.h` | Dimensiones de interfaz y escala externa del mundo. |
@@ -47,6 +50,7 @@ Consulta del código local de AwesomeEngine y Plaguefront, revisada el **15 de o
 | `Games/Source/Plaguefront/Phase5Smoke.cpp` | `SmokePhase5`: matriz de pantallas/contextos/salidas, resize, estado serializado y 22 estados finales. |
 | `Games/Source/Plaguefront/GamepadSmoke.cpp` | `SmokeGamepad`, `PrepareGamepadCapture`: SFML simulado sobre la escena real. |
 | `Games/Source/Plaguefront/RotSmoke.cpp` | `SmokeRotPhase5`: siete estados mediante muertes y cierres de ronda reales. |
+| `Games/Source/Plaguefront/VisualCorrectionsSmoke.cpp` | `SmokeVisualCorrections`: reproducción temporal y píxeles de Idle, lluvia por viewport, etapas del Caster y ciclo global en mapas reales e irregular; se llama al terminar `SmokePhase5(21)`. |
 
 Los números de fase en nombres de pruebas/fixtures identifican archivos existentes; no significan implementaciones alternativas del juego. La aplicación utiliza un solo núcleo vigente.
 
@@ -81,12 +85,15 @@ La convención procede de `Games/Include/Clicker.h`, `Games/Source/Clicker.cpp`,
 | `Jugar.cmd` | Cambia a la raíz y abre build/Plaguefront.exe; exige compilación previa. |
 | `Tools/BuildLocal.ps1` | Entorno MSVC instalado, Release, compilación; opciones -Test/-Smoke. |
 | `Tools/GenerateScenario.ps1` | Genera Los tres pasos sin cambiar los otros mapas. |
-| `Tools/GeneratePixelArt.ps1` | Nueve PNG actuales y verificaciones/muestrarios locales. |
+| `Tools/GeneratePixelArt.ps1` | Entrada pública al paquete raster aprobado; `-Legacy` activa expresamente el generador procedural histórico. |
+| `Tools/Art/BuildApprovedArt.ps1` | Reconstrucción local de unidades, entorno, impactos mágicos y portada desde fuentes conservadas; conserva los retratos existentes; Python con Pillow/NumPy. |
+| `Tools/Art/BuildUnits.py`, `BuildIdle.py`, `BuildEnvironment.py`, `BuildCasterEffects.py` | Empaquetado y acabado nativo de cada componente; la recuperación de Idle copia exactamente sus 448 celdas aprobadas y conserva las otras 2240; los impactos conservan las columnas ajenas a magia. |
+| `Tools/Art/Sources/` | PNG originales y procedencia de unidades, entorno, impactos mágicos y portada; `Units/Approved/approved-atlas.png` conserva la identidad del Idle recuperado. Las fuentes de intentos posteriores no implican integración. |
 | `Tools/GenerateArt.ps1` | Cinco PNG iniciales preservados, semilla 731051. |
 | `Tools/GenerateAudio.ps1` | Síntesis local de 42 WAV y manifiesto. |
 | `Tests/PlaguefrontTests.cpp` | Núcleo: 18 grupos. |
 | `Tests/CampaignTests.cpp` | Campañas, conquista local y regresiones de economía/ambiente. |
-| `Tests/PresentationTests.cpp` | Cámara/animación/eventos/exposición ambiental sin SFML. |
+| `Tests/PresentationTests.cpp` | Cámara, animación/eventos, exposición ambiental, dos ciclos Idle, geometría de lluvia y etapas mágicas; sin ventana SFML. |
 | `Tests/Phase3Tests.cpp` | Viewports, rutas, poses, 188 celdas y campañas del mapa grande. |
 | `Tests/Phase4Tests.cpp` | Turnos, ingresos, respuesta, Lightning, Fire, captura, migración y capacidad de eventos. |
 | `Tests/AudioTests.cpp` | WAV reales, manager y director; reproducción silenciada. |
@@ -100,6 +107,7 @@ La convención procede de `Games/Include/Clicker.h`, `Games/Source/Clicker.cpp`,
 | `Content/Audio/Plaguefront/{Music,Sfx,Ambient}/` | 42 WAV enumerados en sección 6. |
 | `Saves/plaguefront.json`, `Saves/settings.json` | Se crean al guardar; no se requieren para comenzar. |
 | `build/test-output/`, `build/screenshots/`, `build/Testing/` | Resultados de pruebas, PNG y registros. |
+| `build/visual-corrections/` | Baseline, verificaciones de recursos y resultados temporales nuevos; el estado de ejecución se registra en 7.8. |
 | `.vscode/launch.json`, `.vscode/tasks.json`, `.vscode/settings.json` | Configuración heredada/local; no certifica una ruta Debug/F5. |
 | `README.md`, `docs/CURSO_DESARROLLO_PLAGUEFRONT.md`, este documento | Entrada, curso y consulta; LICENSE.md conserva la licencia del repositorio. |
 
@@ -373,7 +381,19 @@ En RenderWorld, un bosque sin edificio utiliza alfa **100/255** cuando su celda 
 
 La previsualización de ruta mantiene trazo dorado de **3 píxeles nativos**, con borde oscuro de 5, y **una única cabeza al final del recorrido**, situada en el centro de la celda de destino y orientada según el último tramo. Su triángulo relleno mide **12 de ancho ×7 de largo** y utiliza el mismo `Gold` del cuerpo; el contorno oscuro mide 14×9 y comparte el color del borde del cuerpo. El borde de la cabeza se dibuja antes del relleno del cuerpo, y el triángulo dorado al final, para mantener una unión continua sin una línea oscura atravesada. Todo se multiplica por el zoom entero. Los tramos intermedios no llevan puntas y se elimina el marcador cuadrado final. Esta geometría sólo comunica el destino de previewPath y no altera el coste ni la orden de movimiento.
 
-AnimationTiming: frames8; idleFrameSeconds=.11, walkFrameSeconds=.06, walkCellSeconds=.12, attackSeconds=.45, hurtSeconds=.30, deathSeconds=.65, castSeconds=.60, weaponContactSeconds=.18, spellContactSeconds=.225, chainIntervalSeconds=.18. AudioDirector comparte los contactos/separación de cadena; el tiempo visual nunca avanza una ronda.
+AnimationTiming vigente: frames8; idleFrameSeconds=.18, walkFrameSeconds=.05, walkCellSeconds=frames×walkFrameSeconds=.40, attackSeconds=.45, hurtSeconds=.30, deathSeconds=.65, castSeconds=.60, weaponContactSeconds=.18, spellContactSeconds=.225, chainIntervalSeconds=.18. Los anteriores .12 s por casilla y .06 s por marco dejaban avanzar sólo dos de los ocho marcos Walk antes de llegar a Idle; no era suficiente que existiera la tira completa. AudioDirector comparte la duración de desplazamiento, los contactos y la separación de cadena; el tiempo visual nunca avanza una ronda. Los valores .11/.06/.12 y sus resultados pertenecen a la etapa histórica de 7.8.
+
+`Game::Update` obtiene `dt` de TimeManager y llama a `AnimationDirector::Update`; `Sample` calcula Idle como `floor(elapsed/idleFrameSeconds)%8`, actualmente con .18 s por marco. `Observe` de una instantánea sin cambios conserva esa fase. El renderer selecciona el marco completo de 48×64, sin recortar miembros durante la reproducción. Una tira de ocho poses y ocho hashes diferentes no demuestran por sí solos que esa ruta temporal funcione: los fixtures comparan el píxel dibujado con el rectángulo del atlas y comprueban vueltas completas, posición, elevación y orientación. La verificación previa está en 7.8 y la integración actual, con identidad recuperada y corrida final aprobada, en 7.9.
+
+`UnitPresentation.h` define `UnitContactWindow`, `UnitContactGeometry` y `SnapUnitPoint`. El apoyo se obtiene del alfa dentro de una ventana de pies/pezuñas por clase, pose y orientación, no del rectángulo completo que puede incluir bastón, arma o capa. Se inspeccionan las tres últimas filas del apoyo y se calcula una huella proporcional, con límite específico por clase; Rider usa aproximadamente el 75% del ancho medido. La sombra comienza en `bottom−1`, solapando un píxel de apoyo: dos filas para humanos y cuerpos caídos, tres para Rider de pie, con alfa 90 en el núcleo y 45 en la fila final. El cadáver identificable de Death 7 usa su propia huella y sustituye el antiguo rectángulo uniforme 28×5 con alfa 190. Unidad, sombra e insignia de suelo comparten el mismo punto proyectado redondeado. `FrameGeometryFor` centraliza alfa, contacto y máscara inferior en caché por textura/handle/tamaño; sólo lee el atlas al cambiar esa identidad y calcula cada marco al solicitarlo, sin lectura GPU por unidad y fotograma.
+
+La corrección de profundidad sólo se aplica a Walk: comprueba la banda opaca real y44…63, la sombra y el marcador contra superficies de celdas existentes. Una intersección envolvente de 48×20 precede a la máscara exacta. `UnitWalkSurfaceEligible` admite celdas a cota igual o inferior a la elevación interpolada y, como excepción, los dos extremos del tramo activo aunque uno esté más alto; una pared ajena más elevada conserva su oclusión. Si hay intersección, la profundidad es `max(profundidadInterpolada+1, profundidadSuelo+.25)`, sin alterar las entradas de terreno ni de props, que mantienen su desplazamiento +.5. Incluye vecinos fuera de la ruta porque una espada, sombra o marca de suelo puede alcanzarlos antes que el centro del cuerpo. No cambia cámara, dimensiones, trayectoria ni posición lógica. Su comprobación gráfica actual se describe en 7.9.
+
+La lluvia usa `RainDrops(width,height,elapsed,storm)` de Weather.h sobre todo el lienzo nativo `world_`. Su cantidad es `clamp(ceil(width*height/(storm?2600:3300)),64,360)`, con tres capas de longitud aproximada 3.5–9 píxeles, velocidad, viento y opacidad diferentes. Una cuadrícula con variación determinista distribuye las gotas; módulo positivo mantiene las cabezas dentro de la vista incluso con tiempo negativo. Los trazos viajan hacia abajo e izquierda y se dibujan en un solo lote de puntos enteros, después del mundo. Al desplazar la cámara no se reutiliza una región fija del mapa. La opción cosmética existente sigue controlando lluvia/niebla; no cambia Weather, costes, fuego o bonificaciones eléctricas.
+
+`VisualEffect` añade `contactSeconds` y `stagedSpell`; no guarda una segunda acción táctica. `SampleSpell` divide el intervalo previo al contacto en Preparation (0–45%), Launch (45–60%) y Travel (60–100%); después dedica el primer 65% a Impact y el resto a Fade. Fire/Ice viajan como proyectiles, Lightning dibuja enlaces quebrados y Heal/Purify emplean motas diferenciadas. Los contactos ofensivos permanecen en .225 s y los saltos adicionales mantienen .18 s; su preparación adelanta el comienzo visual y conserva el final anterior, en lugar de posponer el daño o añadir espera. Los enlaces secundarios con contacto cero empiezan directamente en impacto. `AnimationDirector::Update` elimina los efectos al terminar su vida; `RenderSpellEffect` no aplica daño ni mana y usa las coordenadas/alturas de eventos ya resueltos.
+
+`createdFireIds` registra en el efecto primario de Fire solamente los IDs nuevos del área aparecidos entre las dos instantáneas. `FireAwaitsContact` retrasa su dibujo persistente mientras exista espera de cola o no se alcance `contactSeconds`; no retrasa su creación lógica ni vuelve a ejecutar ignición/daño. Los incendios previos, incluidos aquellos cuya duración se renueva conservando su ID, siguen visibles durante la preparación. El kit purificador mantiene la presentación anterior, también si lo usa un Caster: quitar una fuente mediante inventario no equivale a lanzar Purify. Purify/Incinerate solo adoptan la presentación mágica por etapas cuando los ejecuta el Caster como habilidad; sus usos físicos conservan el efecto anterior.
 
 RotVisual conserva pulseRadiansPerSecond=2.8 y los conteos sourceSporeCount=7, localSporeCount=2, globalSporeCount=1. En C1 los colores y el alfa proceden de `Content/Config.json → rotPalette`, interpretados por `EngineConfig::ReadRotPalette`. Cada propiedad acepta exactamente cuatro enteros de 0 a 255; si falta o es inválida conserva su respaldo, sin invalidar las otras propiedades.
 
@@ -385,13 +405,13 @@ RotVisual conserva pulseRadiansPerSecond=2.8 y los conteos sourceSporeCount=7, l
 | sourceGlow | [239,191,255,255] | Brillo y contorno del centro |
 | localFill | [139,55,185,66] | Suelo local y su pulso multiplicador |
 | localEdge | [211,139,247,255] | Borde, venas y halo local |
-| globalFill | [104,61,153,28] | Cobertura global fuera de fuentes locales |
+| globalFill | [104,61,153,28] | Base global de cada celda existente; el renderer modula su alfa sin sustituir esta configuración |
 | spores | [231,173,255,240] | Partículas y estelas de contaminación |
 | uiText | [232,190,255,255] | Duración, HUD y advertencias de putrefacción/peste |
 
 `RotPaletteConfig::SpriteColor` remapea cuatro materiales RGB concretos del atlas; `Game::RotTexture` conserva texturas derivadas en caché y deja el recurso original intacto. Sólo las regiones de fuente, icono 20 y RotBurst usan esa copia; Smoke/Heal/Purify y el resto del atlas usan el original. El alfa configurado se multiplica por el alfa original del píxel y por los pulsos visuales cuando corresponde.
 
-RotPresentationAt sigue consultando local/global/damage/coveringSources del modelo, sin activar peste por un grupo aún no resuelto. Una capa por celda evita intensidad acumulada. Los avisos esenciales permanecen con efectos cosméticos desactivados. La paleta no pertenece a balance.json ni al guardado de Match. [Implementación paso a paso y JSON completo](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-30).
+RotPresentationAt sigue consultando local/global/damage/coveringSources del modelo, sin activar peste por un grupo aún no resuelto. `RenderWorld` recorre `state.cells`; `RotGround` dibuja una sola base por cada celda local/global. Con peste activa utiliza `globalFill` también dentro de radios locales: multiplica su alfa por `1.9+.3*pulse`, con máximo 105, y añade vetas moradas derivadas de sourceLight/localEdge y del alfa configurado. Conserva los bordes de origen local, los centros y sus indicadores sin sumar otro relleno. Esto refuerza una cobertura lógica que ya era global, antes demasiado tenue fuera de las fuentes; no modifica `RotDamageAt`, conectividad, duración o daño. Los avisos esenciales permanecen con efectos cosméticos desactivados. La paleta no pertenece a balance.json ni al guardado de Match. [Implementación paso a paso y JSON completo](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-30).
 
 ### 3.8. IA: política y límites concretos
 
@@ -636,11 +656,11 @@ Las opciones corresponden al modo activo de `WindowManager::Resolutions()` y se 
 
 ### 6.1. Atlas actuales
 
-Runtime carga `Content/Textures/Plaguefront/Pixel/`; art.json.pixel_art.format_version=3 describe el contrato y conserva textures histórico. No es un cargador automático de cualquier atlas: los rectángulos de PixelRenderer deben cambiar de forma coherente al modificar el manifiesto. PNG de píxeles nativos con alfa0/255, vecino más cercano; texto de salida usa suavizado independiente.
+Runtime carga `Content/Textures/Plaguefront/Pixel/`; `art.json.pixel_art.format_version=4` describe el contrato y conserva el bloque `textures` histórico. No es un cargador automático de cualquier atlas: los rectángulos de PixelRenderer deben cambiar de forma coherente al modificar el manifiesto. PNG de píxeles nativos con alfa0/255, vecino más cercano; texto de salida usa suavizado independiente.
 
 | PNG en Pixel/ | Dimensión | Marco / disposición | Ancla |
 | --- | --- | --- | --- |
-| terrain.png | 480×128 | 48×32;10×4 | (24,16) |
+| terrain.png | 1920×128 | 48×32;40×4 | (24,16) |
 | props.png | 512×320 | 64×80;8×4 | (32,68) |
 | units.png | 2304×3584 | 48×64;48×56 | (24,56) |
 | effects.png | 384×192 | 48×48;8×4 | (24,24) |
@@ -652,7 +672,7 @@ Runtime carga `Content/Textures/Plaguefront/Pixel/`; art.json.pixel_art.format_v
 
 Unidades: columna=estado×8+frame, fila=clase+7×bando+14×dirección; rectángulo=(48×columna, 64×fila, 48, 64). Estados Idle 0, Walk 1, Attack 2, Hurt 3, Death 4, Cast 5; frame 0…7. Direcciones SE/frente 0, SO/frente 1, NE/espalda 2, NO/espalda 3. Dos dibujos corporales y sus espejos, caballo de perfil; no seis orientaciones volumétricas. Hay 7×2×4×6×8=2688 marcos, sin clip exclusivo por habilidad. Death 7 queda como cadáver identificable tras terminar la animación.
 
-Terreno columna=Terrain 0…9 y cuatro pasos ambientales; agua/juncos/vegetación varían, minerales/camino pueden repetir. Superficie 40×28 dentro de 48×32; caras laterales construidas por renderer. Props columnas bosque 0, ruinas 1, roca 2, casa 3, fortaleza 4, fuerte 5, restos 6, fuente 7; cuatro pasos. Banderas/insignias de dueño se dibujan desde estado, sin azul impreso en edificios.
+Terreno: columna=`Terrain+10*TerrainVariant(cell.pos)`, cuatro bloques de diez tipos y cuatro filas ambientales a 5 fps, 160 marcos. `TerrainVariant` mezcla las coordenadas axiales como unsigned de 32 bits y devuelve 0…3; es estable para coordenadas negativas y no depende de cámara, tiempo, altura o selección. Cada variante cambia la composición del material; las filas siguen siendo fases temporales. Superficie 40×28 dentro de 48×32 con la máscara original; caras laterales y uniones de caminos/puentes construidas por renderer. Props columnas bosque 0, ruinas 1, roca 2, casa 3, fortaleza 4, fuerte 5, restos 6, fuente 7; cuatro pasos a 5 fps. Banderas/insignias de dueño se dibujan desde estado, sin azul impreso en edificios.
 
 Efectos columnas corte 0, flecha 1, fuego 2, hielo 3, rayo 4, curación 5, putrefacción 6, purificación 7; cuatro pasos. UI parches panel 0, botón 1, resaltado 2; centro 16×16 uniforme y ornamentación en borde 8. Cursor Normal 0, Move 1, Attack 2, Capture 3, Economy 4, Blocked 5; 24 px físicos con salida altura<1200 y 48 px a partir de 1200. Interactivo consulta puntero/foco real al dibujar; captura oculta usa última SetPosition o posición virtual, explícitamente para la prueba.
 
@@ -663,15 +683,19 @@ Efectos columnas corte 0, flecha 1, fuego 2, hielo 3, rayo 4, curación 5, putre
 | 16–23 | Clear, Rain, Fog, Storm, putrefacción, cadáver, movimiento, fin activación |
 | 24–31 | Precise, Mark, Pike, Carga, Ice, Lightning, Heal, Smoke |
 
-Azul/cruz usa telas #1e3e76, #2866b7, #67a9e3, #aad5f0; carmesí/doble barra #571c32, #a92e4c, #de 5b6c, #f4b09c. Hierro, piel, cuero, madera y magia se conservan entre bandos; no se tiñe la imagen completa. Caster conserva túnica violeta y cambia estola/capa; caballo conserva pelo marrón y cambia manta. Más paletas exactas están en art.json, que es el contrato de datos.
+Azul/cruz usa telas #1e3e76, #2866b7, #67a9e3, #aad5f0; carmesí/doble barra #571c32, #a92e4c, #de5b6c, #f4b09c. Hierro, piel, cuero, madera y magia se conservan entre bandos; no se tiñe la imagen completa. Caster conserva túnica violeta y cambia estola/capa; caballo conserva pelo marrón y cambia manta. art.json conserva las rampas de materiales, pero la portada usa su paleta adaptativa y algunos recursos históricos contienen tonos adicionales. El presupuesto de colores o un mínimo de píxeles compartidos son ayudas de autoría, no requisitos del renderer.
 
 ### 6.2. Producción y verificaciones artísticas
 
-Tools/GeneratePixelArt.ps1 dibuja máscaras, miembros articulados, líneas enteras y grupos de luces con System.Drawing; CharacterHead, Torso, Mask, Limb, Hand, Boot, Horse, Fallen son funciones reales del generador. No utiliza antialiasing, reducción, imágenes externas o servicios remotos. El script escribe nueve PNG y previews bajo build/phase4-art; estos últimos no se cargan en juego.
+El paquete parte de PNG originales creados con image_gen y conservados en `Tools/Art/Sources/`; `BuildApprovedArt.ps1` reconstruye localmente los atlas con Pillow/NumPy, sin pedir nuevas imágenes ni descargar dependencias. `BuildUnits.py` empaqueta los 2688 marcos de units.png desde diseños, contactos y cuerpos caídos, y recupera Idle mediante copia exacta del atlas histórico aprobado `Sources/Units/Approved/approved-atlas.png`, SHA256 `fa1b4944a505b7c22da6fb3574d4148f086556b73b4602006b03202b2f2ed603`. La imagen proporcionada explícitamente por el usuario confirma la identidad de `Sources/Units/approved-saber-lancer.png`, de 1086×1448: misma geometría y alfa, con diferencia RGB máxima 7. No se sustituye ese diseño por una nueva generación. `BuildIdle.py` delega en la misma recuperación exacta de 448 celdas; `BuildUnits.py --restore-approved-idle` y su alias `--idle-only` conservan literalmente las otras 2240 celdas del destino. La ejecución completa conserva las reparaciones compartidas de flutter/encaje de Rider y añade la reparación localizada del rig Walk de Berserker descrita a continuación. Ninguna de estas entradas escribe unit-icons.png: los retratos aprobados permanecen.
 
-Muestrarios conservados: class-lineup-native.png, class-lineup-3x.png, class-lineup-teams-4x.png; units-idle/walk/attack/hurt/death/cast-2x.png; terrain-3x.png, props-3x.png, effects-2x.png, icons-4x.png, ui-4x.png, menu-2x.png; fallen-teams-3x.png, unit-icons-4x.png, cursors-4x.png; font-inspection.png. Los nombres compactados de la lista representan archivos individuales reales de cada estado.
+El atlas final integrado tiene SHA256 `a2aba86fe852c0b99f9d82ba63dad68f2f397220e267602b5411feb6843b86e0`: **448 Idle son copias exactas del atlas aprobado, 64 Walk de Berserker reparan la composición del faldellín y las otras 2176 celdas son idénticas al baseline de esta revisión (`0d6333b6639e…`)**. El rig tenía el faldellín en una máscara de pierna; la otra pierna llegaba a ocultar cuatro de los seis píxeles de las barras carmesí. Se reasignan los píxeles originales de tela y contorno a la cintura, delante de ambas piernas, sin repintar insignia, cambiar diseño ni añadir una capa nueva en runtime. La corrida CTest final aprobada se registra en 7.9. Las 112 poses de `Sources/Units/Idle/` y su validación describen la etapa de 7.8, no la fuente activa de la recuperación actual. Las nuevas propuestas Walk quedaron descartadas bajo `build/unit-integration/discarded-generated-walk/`, con sus prompts, sin integrarse.
 
-Validación histórica vigente del recurso: 2848 marcos no vacíos; 336 secuencias de ocho hashes distintos; 1344 parejas azul/rojo conservan material compartido(≥88 píxeles) y tela(≥5); alfa binario; dimensiones; centros uniformes; sin tela fija en edificios; seis puntas (1, 1); cero escrituras recortadas de las 2688 poses. checks.json, validation.json, faction-checks.json, clipping.txt, determinism.json de build/phase4-art guardan evidencia; dos generaciones dieron SHA256 idénticos. game_integration_verified_by_this_script=false: no sustituye ejecutar el juego.
+`BuildEnvironment.py` recorta variantes de material, conserva la máscara hexagonal y anima reflejos/follaje; `BuildCasterEffects.py` sustituye únicamente las columnas 2,3,4,5,7 de effects.png desde `Sources/Effects/caster-impacts.png` y conserva 0,1,6 desde `base-effects.png`. La portada procede de `Sources/menu-approved.png`. Esta revisión de unidades no modifica el entorno, retratos, portada, efectos mágicos ni sus paletas. La corrección temporal y de contacto se registra por separado de la identidad artística.
+
+Los muestrarios del rediseño están en `build/art-final/units/` y `build/art-final/environment/`, con hojas de clases/frente/espalda, contactos, cuerpos, estados y variantes. Las composiciones de tablero y GIF del generador son muestras de autoría, no capturas de la aplicación. `build/visual-corrections/effects/validation.json` y `caster-impacts-3x.png` describen los veinte marcos mágicos localizados. La etapa anterior guarda resultados reales por tiempo bajo `build/visual-corrections/runtime/`, contrastables con 7.8. Las comparaciones actuales de identidad y la ejecución de integración se separan bajo `build/unit-integration/`; véanse 7.9 y 9.7 antes de atribuirles una aceptación final.
+
+El generador procedural anterior permanece detrás de `Tools/GeneratePixelArt.ps1 -Legacy`. Sus funciones CharacterHead, Torso, Mask, Limb, Hand, Boot, Horse y Fallen, sus nueve PNG y `build/phase4-art` son antecedentes. Su medición histórica de 2848 marcos no vacíos, 336 secuencias de ocho hashes distintos y 1344 parejas de facción no certifica el paquete raster nuevo. Los validadores actuales separan dimensiones, alfa, máscara, recortes y reproducción temporal; los hashes distintos tampoco certifican naturalidad del movimiento. La opción predeterminada de GeneratePixelArt.ps1 delega en el paquete aprobado y no activa Legacy accidentalmente.
 
 ### 6.3. Paquete inicial preservado
 
@@ -747,13 +771,14 @@ Tools/GenerateAudio.ps1 usa Add-Type/C# local: osciladores armónicos, ruido fil
 ### 6.6. Comandos de regeneración opcional
 
 ```powershell
-& .\Tools\GeneratePixelArt.ps1
-& .\Tools\GenerateAudio.ps1
-& .\Tools\GenerateScenario.ps1
-& .\Tools\GenerateArt.ps1
+python -B Tools/Art/BuildUnits.py
+python -B Tools/Art/BuildCasterEffects.py
+python -B Tools/Art/BuildEnvironment.py --verify-only
 ```
 
-Ejecutar desde raíz en PowerShell de Windows con System.Drawing y Add-Type disponibles. Recursos existentes bastan para jugar; regenerar sobrescribe únicamente salidas definidas por cada script y requiere volver a comprobar hashes, pruebas y render. GenerateArt acepta -ProjectRoot. Esta normalización traduce comentarios de scripts y no vuelve a generar ni modifica los recursos.
+Estos son los comandos localizados: `BuildUnits.py` sin flag reconstruye units.png con la recuperación exacta del Idle aprobado, las reparaciones compartidas y el rig de cintura Walk de Berserker, y conserva unit-icons.png; `BuildCasterEffects.py` escribe solo las cinco columnas mágicas de effects.png. `BuildEnvironment.py --verify-only` compara los píxeles del entorno en memoria sin escribir. Requieren Python 3, Pillow y NumPy. `BuildUnits.py --restore-approved-idle` (alias `--idle-only`), equivalente a `BuildIdle.py`, copia sólo 448 celdas aprobadas y conserva literalmente los 2240 marcos restantes del atlas de destino; no vuelve a generar las 112 poses de la etapa anterior ni repara otros estados, incluidos los 64 Walk de Berserker. `--output-atlas RUTA` permite producir una salida fuera del recurso activo, tanto en reconstrucción completa como en recuperación localizada. `BuildIdle.py --preview-only` produce la evidencia sin sustituir units.png. El resultado debe cotejarse con el hash final y la verificación de 7.9; el parche Idle aplicado a un atlas anterior no equivale por sí solo a la reconstrucción completa final.
+
+Para reconstruir deliberadamente todo el paquete existen las entradas equivalentes `./Tools/Art/BuildApprovedArt.ps1` y `./Tools/GeneratePixelArt.ps1`; no son necesarias para repetir estas mejoras localizadas. El wrapper busca el Python local incluido y luego PATH. Los scripts originales GenerateAudio/GenerateScenario/GenerateArt utilizan PowerShell de Windows y, cuando corresponde, System.Drawing/Add-Type; GenerateArt acepta -ProjectRoot. Los recursos incluidos bastan para jugar. Regenerar exige revisar otra vez hashes, pruebas y render; para comparar el generador histórico, use `GeneratePixelArt.ps1 -Legacy -ProjectRoot 'RUTA_DE_COPIA_AISLADA'`.
 
 <a id="7-construccion-y-pruebas"></a>
 
@@ -787,8 +812,8 @@ Los recuentos siguientes identifican la ejecución histórica de normalización 
 | --- | --- | --- |
 | PlaguefrontRules | PlaguefrontTests | 18 grupos/550 comprobaciones: geometría, rutas, reglas, habilidades, ambiente, economía, escenarios, guardado e IA |
 | PlaguefrontCampaigns | PlaguefrontCampaignTests | 7campañas y2regresiones,402validaciones integrales tras comandos |
-| PlaguefrontPresentation | AwesomeEngine→Plaguefront.exe --smoke | Aplicación real/71 capturas+2 consumidores; gráfica, serial, timeout60s |
-| PlaguefrontProjection | PlaguefrontProjectionTests | 15 grupos/6553 checks: cámara, picking, animación, eventos, exposición ambiental |
+| PlaguefrontPresentation | AwesomeEngine→Plaguefront.exe --smoke | Aplicación real/71 capturas+2 consumidores; añade muestras temporales en visual-corrections/runtime; gráfica, serial, timeout60s; resultados nuevos en 7.8 |
+| PlaguefrontProjection | PlaguefrontProjectionTests | Base histórica 15 grupos/6553 checks; C2 amplió a17 y las correcciones visuales añaden5 grupos de Idle, lluvia, etapas mágicas, incendios y soporte no mágico; ejecución nueva en 7.8 |
 | PlaguefrontAudio | PlaguefrontAudioTests | 42 WAV/436 checks: decodificación, forma de onda, buses, voces, eventos/secuencia; audio, serial, timeout60s |
 | PlaguefrontPhase3 | PlaguefrontPhase3Tests | 5 grupos/7790 checks; viewports, rutas, poses, mapa188y3campañas |
 | PlaguefrontPhase4 | PlaguefrontPhase4Tests | 17 grupos/733 checks; turnos, respuesta, cadenas, fuego, captura, migración/capacidad |
@@ -809,7 +834,7 @@ ctest --test-dir build -R "^PlaguefrontAudio$" --output-on-failure
 & .\build\Plaguefront.exe --smoke
 ```
 
-El filtro -LE excluye por etiquetas; no evita toda dependencia de SFML: InputManager sigue enlazando SFML Window. --smoke ejecuta la aplicación, no un render de muestra externo. Conserva 28 fixtures originales y 21 de reglas/interfaz, añade 22 adaptables y dos escenas de compatibilidad. Excepciones identifican el paso exacto y devuelven código 3; fallo de PNG devuelve 2.
+El filtro -LE excluye por etiquetas; no evita toda dependencia de SFML: InputManager sigue enlazando SFML Window. --smoke ejecuta la aplicación, no un render de muestra externo. Conserva 28 fixtures originales y 21 de reglas/interfaz, añade 22 adaptables y dos escenas de compatibilidad. Al final del último fixture llama también a `SmokeVisualCorrections`, que avanza el director con deltas controlados y lee píxeles del renderer real; no depende de que el bucle histórico invoque `Engine::Update`. Excepciones identifican el paso exacto y devuelven código 3; fallo de PNG devuelve 2.
 
 ### 7.3. Resultado final de normalización
 
@@ -932,6 +957,86 @@ La inspección visual previa de [screen-10](../build/screenshots/screen-10.png) 
 
 La [lección 32](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-32) explica cada recorrido y sus comprobaciones prácticas. Las [copias de trabajo](../build/presentation-update-backup/) contienen fuentes de esta intervención y los dos documentos previos en `docs`; no constituyen un snapshot completo del motor. El snapshot C0 permanece intacto.
 
+<a id="78-correcciones-localizadas-sobre-el-arte-aprobado"></a>
+
+### 7.8. Correcciones visuales del paquete aprobado
+
+**Etapa anterior, verificada el 16 de octubre de 2026: 9/9 suites aprobadas en 31.34 s, incluido el paquete Idle que se aceptó entonces como definitivo.** El recorrido gráfico terminó en 27.29 s y realizó 769681 comprobaciones nuevas de runtime. [Resultado de CTest de esta etapa](../build/visual-corrections/tests-final.log) y [detalle de cada suite](../build/visual-corrections/tests-final-details.log). Los éxitos de 7.3–7.7 corresponden a compilaciones anteriores. Se conserva aquí la historia y sus cifras; la recuperación posterior del diseño aprobado y los tiempos actuales se describen en 7.9 y necesitan su propia comprobación. No se presenta la presencia de PNG o de una spritesheet como prueba de reproducción temporal.
+
+| Problema comprobado | Cambio localizado / autoridad conservada |
+|---|---|
+| Idle con movimiento poco coherente | El reloj y la selección de marcos ya avanzaban en Presentation.cpp/Game.cpp; las muestras anteriores no probaban los píxeles a lo largo del tiempo. BuildUnits.py integra los ciclos originales de BuildIdle.py por clase desde Tools/Art/Sources/Units/Idle, con escala fija y registro de apoyos. Los diseños de Walk/Attack/Hurt/Death/Cast se mantienen; la ejecución completa corrige flutter/encaje compartidos de Rider sin rediseñarlos. `--idle-only` cambia solo 448 celdas y no reproduce esas reparaciones compartidas. Conserva celda 48×64, ancla (24,56), ocho marcos y cuatro orientaciones. Las muestras temporales finales verifican la reproducción de ambos ciclos. |
+| Lluvia uniforme | Weather.h reemplaza los 64 trazos iguales por una distribución variable de tres capas, con cantidad 64…360 según el viewport, viento y velocidad continua; PixelRenderer.cpp los dibuja en un lote. No se cambian las reglas de Rain/Storm, su activación ni sus modificadores. |
+| Caster sin preparación/trayectoria | VisualEffect añade datos visuales; Presentation.cpp conserva el contacto/final ofensivo y la secuencia de eventos. SpellPresentation.h/SpellRenderer.cpp separan fases, proyectiles, enlaces e impactos; BuildCasterEffects.py actualiza solo veinte marcos de cinco columnas mágicas. FireAwaitsContact oculta hasta el contacto únicamente los incendios nuevos del área; conserva incendios previos/refrescados. Ataque ordinario del Caster, Fire, Ice, Lightning, Heal, Purify e Incinerate se comprueban por comandos reales; el kit, incluso usado por Caster, y el soporte no mágico mantienen sus efectos anteriores. |
+| Peste global poco perceptible | RotPresentationAt ya clasificaba como global toda celda existente y RotDamageAt ya aplicaba daño global fuera del radio local. No se encontró divergencia de daño que justificase cambiar reglas. RotGround refuerza una única base global por celda y añade vetas usando la paleta configurada; mantiene centros y acentos locales. |
+
+`Tests/PresentationTests.cpp` añade los grupos `ciclo idle temporal de todas las clases y orientaciones`, `lluvia continua y acotada en distintos viewports`, `etapas mágicas con contacto y duración conservados`, `incendio nuevo espera al contacto y conserva incendios previos` y `soporte no mágico conserva los efectos originales`. Comprueban dos ciclos Idle y límites temporales, estabilidad de coordenadas/facing/estado lógico, lluvia determinista y finita en dieciséis regiones, fases mágicas ordenadas, contacto de daño conservado, ausencia de efectos duplicados y liberación de la cola. La regresión de Fire distingue nuevos IDs de toda el área, refrescos y una acción encolada tras movimiento; el soporte incluye kit de Caster. La proyección numérica no sustituye la inspección de la animación dibujada.
+
+`VisualCorrectionsSmoke.cpp` enlaza esos contratos con el render real:
+
+- Reproduce dieciséis muestras de cada clase, bando y orientación mediante `AnimationDirector::Update`, tras orientar la tropa con un movimiento legal. Compara cada píxel opaco con el rectángulo del atlas seleccionado y el hash de ambas vueltas. La fase, posición y escala no se deducen de una hoja fuente.
+- Compara lluvia con un fotograma despejado al mismo tiempo visual en 1280×720, 1440×900, 1920×1080 y 1100×1100, zoom 1/3 y cámara desplazada; mide movimiento y cobertura por dieciséis regiones del lienzo nativo, con presupuesto limitado.
+- Recorre los tres escenarios y un fixture irregular de superficies diversas, con unidades y celdas vacías. Contrasta clasificación/daño por cada celda de `state.cells` y píxeles de su superficie; las imágenes comparativas de cobertura omiten temporalmente sprites de props/unidades para medir el suelo sin oclusión. Guarda además vistas normales con esas entidades. Activa peste mediante `EndRound`, agota las fuentes, conserva la reserva y verifica su desaparición con cierres reales; pan/zoom no condicionan la clasificación.
+- Ejecuta siete acciones del Caster y muestrea Preparation/Launch/Travel/Impact/Fade. Conserva la instantánea serializada después de resolver la orden y exige que reproducción, render y desvanecimiento no la alteren; vuelve a observar la misma instantánea para detectar duplicados y comprueba la cola vacía al finalizar.
+
+La evidencia final está en [verification.json](../build/visual-corrections/runtime/verification.json) y los PNG de cada serie. [resource-manifest.json](../build/visual-corrections/runtime/resource-manifest.json) vincula las capturas con los SHA256 de units.png (`0d6333b6639e…`), effects.png (`73c0fbaeac1d…`) y el ejecutable final. El baseline anterior a esta etapa contiene 238 hashes de proyecto, 48 PNG y nueve copias de atlas runtime, más existencia/hashes/copias de configuración y saves: [manifiesto](../build/visual-corrections/baseline/project-hashes.json), [PNG](../build/visual-corrections/baseline/png-hashes.json), [estado de usuario](../build/visual-corrections/baseline/user-state.json). Excluye build, .git, .vscode y cachés de Python.
+
+```powershell
+& .\Tools\BuildLocal.ps1 -Test
+# Para repetir solo la comprobación gráfica después de una corrección nueva.
+ctest --test-dir build -R '^PlaguefrontPresentation$' --output-on-failure
+# Para repetir los contratos puros sin abrir la ventana.
+ctest --test-dir build -R '^PlaguefrontProjection$' --output-on-failure
+```
+
+| Verificación final | Resultado y evidencia |
+|---|---|
+| Compilación MSVC Release | Completada; [construcción final](../build/visual-corrections/build-final.log) |
+| Matriz CTest completa | **9/9 aprobadas, 31.34 s**; [registro final](../build/visual-corrections/tests-final.log) |
+| Proyección, animación, lluvia, magia y regresiones de Fire/soporte | **22 grupos/27274 comprobaciones**, 0.03 s; [detalle final](../build/visual-corrections/tests-final-details.log) |
+| Aplicación y muestras temporales | **769681 comprobaciones nuevas**, 27.29 s; conserva 71 pantallas anteriores y dos consumidores, además de las series nuevas |
+| Dos vueltas Idle y píxeles de 56 combinaciones | **896 muestras**,16 por combinación, orden/anclaje y vuelta comprobados; tiras y [GIF de runtime](../build/visual-corrections/runtime/idle-runtime-2x.gif) |
+| Lluvia, cuatro resoluciones y dos zooms | **48 muestras** de Rain/Storm, cobertura por dieciséis regiones, movimiento y presupuesto acotado; JSON de runtime |
+| Caster, siete acciones y cinco fases | **35 capturas temporales**, contacto/final y estado lógico preservados, cola vacía; [montaje final](../build/visual-corrections/runtime/caster-stages-runtime.png) |
+| Cobertura global de tres mapas más irregular | **436 celdas** (99+99+188+50), con activación real, cámara desplazada, reserva y fin; JSON/capturas de runtime |
+| Alcance, reglas, mapas, configuración y saves | **68 archivos protegidos sin diferencias**; de 48 PNG preexistentes solo cambian units/effects, columnas 0/1/6 de effects idénticas; [informe de integridad](../build/visual-corrections/scope-verification.json) |
+
+La comparación de celdas de units.png registra **1234 modificadas: 448 Idle y 786 por correcciones compartidas** (Walk 232, Attack 218, Hurt 56, Death 32, Cast 248); 1454 celdas ajenas a Idle permanecen idénticas. No se afirma que todo el cambio esté limitado a la primera banda de ocho columnas. [Detalle de alcance](../build/visual-corrections/units/correction-scope.json) y [registro de apoyos/escala del Idle](../build/visual-corrections/units/idle-validation.json). Los retratos, terreno, props, portada y demás PNG preexistentes se conservan.
+
+La ejecución parcial de 8/8 en 3.80 s y la corrida diagnóstica de 755717 comprobaciones en 28.08 s con Idle anterior se conservan como antecedentes; no se utilizan para aceptar el Idle definitivo. La tabla anterior corresponde al recurso final y prevalece sobre esas comprobaciones intermedias. Se revisaron los montajes y capturas nativas finales de Idle, Caster y cobertura; las muestras son una inspección programada del juego, no una partida humana ni una medición de FPS.
+
+El delta del fixture es controlado y recorre el mismo director y renderer de la aplicación; no certifica una sesión humana, fluidez subjetiva, prueba auditiva ni rendimiento de todos los equipos. Las capturas nuevas tienen índice en 9.6. La paleta morada continúa viniendo de Content/Config.json, sin segundo archivo de configuración ni cambios de balance autorizados por el aspecto del dibujo.
+
+<a id="79-recuperación-del-diseño-y-contacto-de-unidades"></a>
+
+### 7.9. Recuperación del diseño y contacto de unidades
+
+**Verificación final del 16 de octubre de 2026: compilación Release y 9/9 suites CTest aprobadas en 36.34 s; la suite gráfica Presentation terminó en 32.33 s.** La identidad se confirmó con la imagen explícita del usuario y la corrida usa el atlas de producción `a2aba86fe852…`, sin sustitución temporal de textura. [Compilación final](../build/unit-integration/build-final.log), [CTest final](../build/unit-integration/tests-final.log) y [detalle de las suites](../build/unit-integration/tests-final-details.log). Los resultados de 7.8 pertenecen a `0d6333b6639e…`; esta ejecución comprueba el recurso recuperado. Se conservan reglas, cámara, controles, paletas, retratos, entorno y las correcciones de lluvia, peste y Caster.
+
+| Causa comprobada | Corrección localizada / evidencia |
+|---|---|
+| Insignia que cambia de lugar sobre la figura | `finish_emblem` elegía de nuevo una zona de tela por pose y pintaba la insignia dentro del PNG: se midieron saltos de hasta 9 píxeles verticales. El marcador independiente del suelo no causaba ese desplazamiento corporal. Se recuperan exactamente los 448 Idle originales aprobados, sin redibujar personaje ni insignias. |
+| Barras de Berserker ocultas al caminar | El faldellín pertenecía a una máscara de pierna y la pierna opuesta ocultaba cuatro de sus seis píxeles de barra. El rig reasigna los píxeles originales de tela y contorno a la cintura, delante de ambas piernas, sólo en los 64 marcos Walk de esa clase. No repinta el patrón ni modifica otras clases o estados. |
+| Walk apenas perceptible | .12 s por casilla / .06 s por marco sólo mostraban dos marcos. Ahora la duración visual es ocho × .05 s = .40 s por casilla y Idle usa .18 s por marco. No se altera el coste, recorrido, posición lógica ni orden de movimiento; el audio comparte la duración visual. |
+| Franja transparente antes de la sombra | El soporte Idle terminaba en la fila 55 del marco (bottom exclusivo 56), mientras la sombra empezaba un píxel después del ancla. `UnitContactGeometry` mide el alfa dentro de ventanas de apoyo por clase y refleja la ventana con la orientación; `shadowTop=bottom−1` da un píxel de encaje sin desplazar el sprite. |
+| Mancha desproporcionada o demasiado gruesa | Huella proporcional al apoyo, con límites por clase, dos filas humanas y tres de Rider, núcleo alfa 90 y remate 45. Death 7 usa el contacto del cuerpo caído, en lugar de 28×5/alfa190. El caché evita leer el atlas cada fotograma y `SnapUnitPoint` comparte redondeo entre unidad, sombra e insignia de suelo. |
+| Parte inferior o marcador tapados durante Walk | La profundidad del centro interpolado dejaba pintar después una superficie que ya tocaba espada, sombra o marca de suelo; también podía ocurrir con un vecino fuera de la ruta. Se comprueba la banda opaca y44…63, sombra y marcador contra superficies reales, con descarte envolvente 48×20. Sólo Walk puede subir a `suelo+.25`, conservando la profundidad mayor que ya tuviese y las entradas de props +.5. Se admiten suelos a cota igual/inferior a la elevación visual y los extremos del tramo actual; una pared ajena más alta no recibe esa excepción. |
+
+La imagen explícita del usuario corresponde a `Tools/Art/Sources/Units/approved-saber-lancer.png`, 1086×1448, con geometría y alfa coincidentes y diferencia RGB máxima 7. El Idle se copia de `Tools/Art/Sources/Units/Approved/approved-atlas.png`, SHA256 completo `fa1b4944a505b7c22da6fb3574d4148f086556b73b4602006b03202b2f2ed603`. La celda sigue siendo 48×64 y el ancla (24,56). El atlas final integrado es `a2aba86fe852c0b99f9d82ba63dad68f2f397220e267602b5411feb6843b86e0`: **448 Idle originales exactos, 64 Walk de Berserker reparados y 2176 celdas restantes exactas respecto al baseline `0d6333b6639e…`**. [approved-idle-restore.json](../build/unit-integration/units/approved-idle-restore.json) documenta la copia localizada de Idle; [berserker-waist-scope.json](../build/unit-integration/units/berserker-waist-scope.json) documenta la reparación posterior del rig y su alcance. Los informes y comparaciones intermedios describen su propia versión, no reemplazan el hash final. Las 112 poses Idle regeneradas de la etapa anterior quedan como antecedentes; las nuevas fuentes Walk descartadas tampoco se integran.
+
+`UnitIntegrationSmoke.cpp` recorre `Match::Move`, `Observe`, `Update`, `RenderWorld` y ScreenshotManager reales con delta controlado máximo .025 s y cámara fija. La corrida final aprobó **4338084 comprobaciones, 56 marchas completas y 112 ciclos Idle, con 1400 muestras**: reposo inicial, ocho marcos Walk y dos vueltas Idle al llegar por cada combinación de clase/bando/orientación. Verifica apoyos, sombra, marcador, conservación de insignias originales y un escenario de batalla cargado. El fixture exige las **896 anclas/máscaras** estables de `Tools/Art/Sources/Units/Approved/locomotion-anchors.json` para Idle/Walk y contrasta el patrón original sobre atlas y render, sin dibujar nuevas insignias. Las regresiones de profundidad incluyen superficies vecinas, sentidos opuestos, rotación y alturas. [verification.json](../build/unit-integration/runtime/verification.json) registra `pass=true`, el atlas de producción y `temporary_texture_override=false`.
+
+| Comprobación final | Resultado / evidencia |
+|---|---|
+| Matriz CTest | **9/9, 36.34 s**; suite Presentation **32.33 s**, logs finales indicados arriba. |
+| Contratos puros de presentación | **29 grupos y 38318 comprobaciones**; anclaje/contacto, tiempos, profundidad, lluvia y magia. |
+| Integración temporal de unidades | **4338084 comprobaciones**, 56 marchas, 112 ciclos Idle y 1400 muestras; JSON y series del renderer. |
+| Regresión de correcciones visuales | **755717 comprobaciones** de VisualCorrectionsSmoke; mantiene las rutas de lluvia, peste y Caster. |
+| Audio | **454 comprobaciones**; conserva la sincronización con la duración visual vigente. |
+| Alcance y estado del usuario | **68 archivos protegidos sin diferencias**; sólo cambia units.png entre los PNG runtime, configuración y guardados intactos; [auditoría de alcance](../build/unit-integration/scope-verification.json). |
+
+Los GIF enlazados en 9.7 se componen de capturas reales: mantienen el reposo inicial durante 700 ms para facilitar la lectura, muestran los ocho marcos de marcha y la llegada con dos ciclos Idle. Las secuencias de marcha no se repiten automáticamente, evitando que un retorno del montaje al inicio parezca una teletransportación del juego. [resource-manifest.json](../build/unit-integration/runtime/resource-manifest.json) reúne la identidad del recurso, ejecutable e informes de esta entrega. Las cifras de rendimiento anteriores se conservan en sus secciones históricas y no se extrapolan a esta revisión. El resultado prueba reproducción y conservación de estado; no afirma fluidez subjetiva, una partida humana ni una medición sostenida de FPS.
+
 
 ## 8. Diagnóstico y límites
 
@@ -953,6 +1058,10 @@ La [lección 32](CURSO_DESARROLLO_PLAGUEFRONT.md#leccion-32) explica cada recorr
 | Orden deshabilitada incorrectamente | Consultar CheckAction/Result.message y probar comando en copia activada mediante PreviewRules; CanTarget no valida acción consumida. Invalidar caché cuando cambie una condición. |
 | Fuente/cadáver muestra daño antes de tiempo | Inspeccionar round/deathRound/remaining, Distance, rotRadius, LargestSourceGroup, globalRemaining, RotDamageAt y FireDamageAt en ese orden. |
 | Daño local/global parece doble | RotDamageAt elige local antes que global y RenderWorld dibuja una sola capa/celda. FireDamageAt sí se suma como peligro distinto. |
+| Peste activa parece limitada a unas fuentes | Comprobar globalRemaining y cada RotPresentationAt sobre state.cells; después globalFill.a, vetas y orden de RotGround. La cobertura lógica ya es global: no ampliar rotRadius ni sumar rellenos/daño para hacerla visible. |
+| Idle tiene ocho imágenes pero no se ve animado | Seguir Game::Update→AnimationDirector::Update/Sample→fila/columna de Atlas; comprobar dos vueltas temporales y comparar píxeles reales con el marco esperado. No confundir poses independientes o hashes con reproducción. |
+| Lluvia desaparece al desplazar cámara o redimensionar | RainDrops recibe world_.getSize(), no un rectángulo fijo del mapa; revisar presupuesto, módulo positivo y cobertura del viewport. El ajuste de cámara no debe alterar Weather lógico. |
+| Caster impacta tarde o conserva partículas | Contrastar delay+contactSeconds con el aviso de Damage y el final delay+lifetime anterior; revisar stagedSpell, SampleSpell y borrado por AnimationDirector::Update, sin ejecutar otra vez UseAbility. |
 | Captura se completa al seleccionar o cargar | BeginActivation no cambia propiedad; revisar CaptureRequired, captureProgress, capturingPlayer y orden Capture. En v1 la migración limita a total−1. |
 | Se recupera maná o ingreso al alternar tropas | activationStarted impide repetir comienzo; StartTurn entrega Income una vez; EndActivation conserva bando. No duplicar esos cambios en UI/IA. |
 | IA no avanza | StepAI requiere VersusAI/rojo/sin ganador; inspeccionar AvailableCount, mejor Decision y aceptación del comando simulado. Game espera Busy y aiDelay antes de llamarla. |
@@ -973,6 +1082,7 @@ Guardar un caso mínimo lógico permite usar los ejecutables existentes; el rend
 - No se realizó partida manual humana completa, estudio competitivo de balance ni evaluación auditiva de mezcla/repetición. Campañas usan rival que pasa; prueban legalidad/progresión, no fuerza contra personas.
 - Cámara usa zoom entero 1–3 y una orientación fija por escenario: 60° en Los tres pasos y 0° en los otros dos. No hay giro libre en los controles. El mundo conserva píxel físico entero y permite pan si no cabe; no se promete una distribución móvil arbitraria debajo del mínimo 960×600.
 - Los cuerpos tienen frente/espalda y espejos, el caballo mantiene perfil lateral; son máscaras2D, no personajes volumétricos con seis direcciones completas. Las habilidades comparten Attack/Cast.
+- Las series temporales finales de 7.8 usan deltas visuales controlados y lectura de píxeles del renderer. Su reproducción está comprobada; siguen pendientes una partida humana y una medición sostenida de FPS, sin generalizar el rendimiento a otros equipos.
 - Maximize/Restore son nativos sólo en Windows. Compilación/lanzamiento/recursos generados están verificados en Windows MSVC Release; no se certifican Linux, macOS, MinGW ni Debug/F5.
 - Clicker/Bounce preservan lienzo1440×900 estirado en ultrapanorámico; se comprobó API/ciclo/contenido/récords, sin adaptar sus layouts.
 - Vectores y copias completas simplifican escenarios99/188 celdas; límites de archivo no prometen rendimiento constante para4096 celdas/512unidades. Una escala mayor requiere medir.
@@ -1093,6 +1203,48 @@ Ventana oculta, fullscreen no certificado como cambio exclusivo físico, resize 
 | [screen-16.png](../build/screenshots/screen-16.png) | Los tres pasos en conjunto con la nueva orientación; conserva sus 188 celdas. |
 
 El hover de árboles se comprueba comparando píxeles de estados consecutivos en `verifyTreeHover`; un PNG fijo no prueba por sí solo que el árbol cambie al entrar y salir el cursor. Los resultados CTest de esta entrega están en 7.7.
+
+### 9.6. Series temporales de las correcciones visuales
+
+**Series finales generadas y revisadas en la ejecución de 7.8.** Son muestras de `world_` nativo capturadas mediante ScreenshotManager, además de las 71 pantallas históricas de la aplicación; el nombre de resolución identifica la salida solicitada, no obliga a que el PNG nativo tenga esas dimensiones. Los montajes conservan sus píxeles y no interpolan fotogramas.
+
+| Serie bajo build/visual-corrections/runtime/ | Contenido verificado y lectura |
+|---|---|
+| `idle-CLASE-BANDO-DIRECCION.png` | Tira de ocho marcos dibujados, para 7×2×4 combinaciones; verification.json registra dieciséis hashes temporales y la vuelta del ciclo. |
+| `rain-1440x900-z1-w1-t0.png`…`t2.png` y otras salidas | Tres instantes separados .08s; diferencias con Clear, cobertura y cantidad se registran para Rain/Storm y zoom 1/3. |
+| `plague-ESCENARIO-local/global/pan/residual/final.png` | Radios antes de activación, cobertura global, cámara lejos del foco, reserva sin fuentes y agotamiento; escenario3 corresponde al fixture irregular. |
+| `spell-8-preparation/launch/travel/impact/fade.png` | Cinco momentos de Fire; las otras seis acciones usan su índice de Ability y la misma nomenclatura de fases. |
+| `verification.json` | Resultado del proceso, comprobaciones, hashes, tiempos, cobertura de lluvia/celdas y preservación lógica; debe comprobarse su fecha y pass. |
+| [idle-runtime-2x.gif](../build/visual-corrections/runtime/idle-runtime-2x.gif) | Montaje animado de las tiras dibujadas por el motor; 56 combinaciones de clase, bando y orientación. |
+| [caster-stages-runtime.png](../build/visual-corrections/runtime/caster-stages-runtime.png) | Las 35 capturas reales de siete acciones y cinco etapas, reunidas sin generar imágenes intermedias. |
+| [resource-manifest.json](../build/visual-corrections/runtime/resource-manifest.json) | Registra SHA256 de units.png, effects.png, ejecutable y verification.json, y declara la procedencia de los montajes. |
+
+Las barras de nombre anteriores representan archivos individuales. El GIF y el montaje indicados sí reúnen esos fotogramas reales; un muestrario de fuentes no se presenta como una captura del juego. El registro final verifica 896 muestras Idle, 48 de lluvia, 35 mágicas y 436 celdas de cobertura global; las limitaciones de sesión humana y FPS permanecen en 8.2.
+
+### 9.7. Evidencia de la revisión de integración de unidades
+
+**Series finales de la corrida aprobada de 7.9.** Los archivos bajo `build/unit-integration/` distinguen fuentes históricas, comparaciones intermedias, atlas final y capturas del renderer. El recurso final es `a2aba86fe852…`, cargado desde producción sin sustitución temporal. Los montajes de runtime emplean fotogramas capturados, sin inventar poses intermedias.
+
+| Evidencia | Uso y estado |
+|---|---|
+| [approved-idle-restore.json](../build/unit-integration/units/approved-idle-restore.json) | Copia localizada exacta de 448 Idle desde la fuente aprobada fa1b; documenta esa operación anterior a la reparación del faldellín. |
+| [berserker-waist-scope.json](../build/unit-integration/units/berserker-waist-scope.json) | Atlas final a2aba86f, 64 Walk de Berserker reparados, 448 Idle conservados y otras 2176 celdas intactas; sin repintar píxeles fuente. |
+| [identity-comparison.json](../build/unit-integration/candidate/identity-comparison.json), `candidate/idle-three-way-1x/2x/3x.png` y GIF | Comparaciones de identidad entre atlas anterior, etapa 7.8 y recuperación de Idle; son evidencia intermedia de atlas, no captura del juego ni manifiesto del resultado CTest final. |
+| `build/unit-integration/units/berserker-waist-frame6-before-after-6x.png` y `berserker-waist-cycle-before-after-6x.png` | Comparación localizada del faldellín antes/después; permite revisar el patrón recuperado en el rig. |
+| `build/unit-integration/discarded-generated-walk/` y `prompts.json` | Nuevas propuestas descartadas; no integradas ni usadas como evidencia de runtime. |
+| [verification.json](../build/unit-integration/runtime/verification.json) | `pass=true`, 4338084 comprobaciones, 56 marchas, 112 ciclos Idle y 1400 muestras; identifica el recurso de producción y descarta sustitución temporal. |
+| [locomotion-anchors.json](../Tools/Art/Sources/Units/Approved/locomotion-anchors.json) | Las 896 anclas/máscaras originales obligatorias para contrastar Idle y Walk de todas las clases, bandos y orientaciones sobre atlas y render. |
+| `build/unit-integration/runtime/initial-idle-CLASE-BANDO-DIRECCION.png` y `motion-CLASE-BANDO-DIRECCION.png` | Reposo inicial y tira de ocho marcos Walk más dos ciclos Idle al llegar, por cada una de las 56 combinaciones. |
+| [saber-idle-walk-arrival-3x.gif](../build/unit-integration/runtime/saber-idle-walk-arrival-3x.gif) | Secuencia real de Saber a 3×: reposo inicial mantenido 700 ms, ocho marcos Walk y llegada con dos vueltas Idle; sin repetición automática. |
+| [walk-arrival-idle-runtime-2x.gif](../build/unit-integration/runtime/walk-arrival-idle-runtime-2x.gif) | Montaje real por clases/orientaciones a 2× con reposo inicial, marcha y llegada; no reinicia la posición al terminar. |
+| [idle-runtime-2x.gif](../build/unit-integration/runtime/idle-runtime-2x.gif) | Dos ciclos de reposo capturados por el renderer con el diseño recuperado. |
+| `battle-walk-0.png`…`battle-walk-7.png`, `battle-arrival.png` y [battle-walk-arrival-runtime-2x.gif](../build/unit-integration/runtime/battle-walk-arrival-runtime-2x.gif) | Marcha y llegada de una orden legal en el escenario cargado; GIF real sin repetición automática. |
+| [shadows-before-after-1x.png](../build/unit-integration/runtime/shadows-before-after-1x.png) / [2x](../build/unit-integration/runtime/shadows-before-after-2x.png) | Comparaciones de sombras mediante recortes de capturas auténticas anteriores/actuales, conservando la escala entera. |
+| [resource-manifest.json](../build/unit-integration/runtime/resource-manifest.json) | Vincula el atlas final, ejecutable, informes y series temporales de esta entrega. |
+| [galería anterior](../build/art-final/runtime/phase4-20.png) / [galería actual](../build/screenshots/phase4-20.png) | Mismo fixture de catorce tropas y encuadre `FocusCamera(true)`, salida 1440×900; la anterior conserva las sombras antiguas. Permite recortes comparables a escala entera sin fabricar un render antiguo. |
+| [cadáver anterior](../build/art-final/runtime/phase4-7.png) / [cadáver actual](../build/screenshots/phase4-7.png) | Pareja del fixture de cuerpo caído para revisar también la sustitución de la mancha uniforme del cadáver. |
+
+El baseline de esta etapa conserva hashes y copias bajo `build/unit-integration/baseline/`. Las galerías anteriores permanecen bajo `build/art-final/runtime/`; no se reemplazan por dibujos de comparación. Las carpetas de runtime que se regeneran pueden contener bytes posteriores a sus manifiestos históricos: revisar fecha y hash antes de atribuirles los resultados de 7.8. Ninguna de estas series equivale a una partida humana ni a una medición sostenida de FPS.
 
 ## 10. Evolución y consolidación
 

@@ -402,6 +402,14 @@ namespace Plaguefront {
     }
     std::vector<const CombatEvent *> events;
     std::map<int, int> combatLoss;
+    const auto createdFires = [&](Hex center) {
+      std::vector<int> ids;
+      for (const auto &fire : after.state.fires)
+        if (Distance(center, fire.pos) <= after.config.fireRadius &&
+            std::ranges::none_of(before.state.fires, [&](const FireZone &old) { return old.id == fire.id; }))
+          ids.push_back(fire.id);
+      return ids;
+    };
     float environmentDelay = 0.f;
     const auto pending = [](const Track &track) {float time=std::max(0.f,track.clip.duration-track.visual.elapsed);for(const auto &clip:track.queue)time+=clip.duration;return time; };
     for (const auto &event : after.state.combatEvents)
@@ -434,7 +442,17 @@ namespace Plaguefront {
         wait(victimTrack, impact);
         victimTrack.dead = event->lethal;
         Queue(victimTrack, {event->lethal ? AnimState::Death : AnimState::Hurt, Duration(event->lethal ? AnimState::Death : AnimState::Hurt), {}, {}, -1});
-        effects_.push_back({AttackEffect(attacker->type, event->ability), event->from, event->to, Height(after, event->from), Height(after, event->to), 0.f, 0.42f, impact, event->amount, attacker->owner, ""});
+        VisualEffect spell{AttackEffect(attacker->type, event->ability), event->from, event->to, Height(after, event->from), Height(after, event->to), 0.f, 0.42f, impact, event->amount, attacker->owner, ""};
+        if (cast) {
+          // La preparación antecede al contacto existente sin retrasar el daño ni prolongar el efecto.
+          spell.contactSeconds = event->chainIndex > 0 ? 0.f : AnimationTiming.spellContactSeconds;
+          spell.delay -= spell.contactSeconds;
+          spell.lifetime += spell.contactSeconds;
+          spell.stagedSpell = true;
+        }
+        if (event->ability == Ability::Fire && !event->counter && event->chainIndex == 0)
+          spell.createdFireIds = createdFires(event->to);
+        effects_.push_back(std::move(spell));
         effects_.push_back({EffectType::Damage, event->to, event->to, Height(after, event->to), Height(after, event->to), 0.f, 0.85f, impact, event->amount, victim->owner, (event->counter ? "CONTRA -" : "-") + std::to_string(event->amount)});
         lastImpact = std::max(lastImpact, impact);
       }
@@ -501,27 +519,47 @@ namespace Plaguefront {
       const auto state = unit->Alive() ? AnimState::Hurt : AnimState::Death;
       Queue(track, {state, Duration(state), {}, {}, -1});
       effects_.push_back({EffectType::Damage, unit->pos, unit->pos, Height(after, unit->pos), Height(after, unit->pos), 0.F, 0.85F, delay, old->hp - unit->hp - combatLoss[unit->id], unit->owner, "-" + std::to_string(old->hp - unit->hp - combatLoss[unit->id])});
-      if (enemyAttack)
+      if (enemyAttack) {
         effects_.push_back({AttackEffect(actor->type, hint), actor->pos, unit->pos,
                             Height(after, actor->pos), Height(after, unit->pos), 0.F, 0.48F, actorDelay + contactDelay, old->hp - unit->hp, actor->owner, ""});
+        if (actor->type == UnitClass::Caster || (hint && Magic(*hint))) {
+          auto &spell = effects_.back();
+          spell.contactSeconds = contactDelay;
+          spell.delay -= contactDelay;
+          spell.lifetime += contactDelay;
+          spell.stagedSpell = true;
+          if (hint == Ability::Fire)
+            spell.createdFireIds = createdFires(unit->pos);
+        }
+      }
     }
     for (const auto *unit : healed) {
       const auto *old = before.Find(unit->id);
       effects_.push_back({EffectType::Heal, actor ? actor->pos : unit->pos, unit->pos,
                           actor ? Height(after, actor->pos) : Height(after, unit->pos), Height(after, unit->pos), 0.F, 0.75F, actorDelay, unit->hp - old->hp, unit->owner, "+" + std::to_string(unit->hp - old->hp)});
+      if (actor && actor->type == UnitClass::Caster) {
+        effects_.back().stagedSpell = true;
+        effects_.back().contactSeconds = contactDelay;
+      }
     }
     for (const auto &source : after.state.sources)
       if (std::ranges::none_of(before.state.sources, [&](const Source &old) { return old.id == source.id; }))
         effects_.push_back({EffectType::RotBurst, source.pos, source.pos, Height(after, source.pos), Height(after, source.pos), 0.F, 0.80F, 0.F, 0, -1, "PUTREFACCION"});
     if (before.state.round == after.state.round) {
       for (const auto &source : before.state.sources)
-        if (std::ranges::none_of(after.state.sources, [&](const Source &next) { return next.id == source.id; }))
+        if (std::ranges::none_of(after.state.sources, [&](const Source &next) { return next.id == source.id; })) {
           effects_.push_back({EffectType::Purify, actor ? actor->pos : source.pos, source.pos,
                               actor ? Height(after, actor->pos) : Height(after, source.pos), Height(after, source.pos), 0.F, 0.65F, actorDelay, 0, actor ? actor->owner : -1, "PURIFICADO"});
+          effects_.back().stagedSpell = actor && actor->type == UnitClass::Caster && hint == Ability::Purify;
+          effects_.back().contactSeconds = effects_.back().stagedSpell ? contactDelay : 0.f;
+        }
       for (const auto &corpse : before.state.corpses)
-        if (std::ranges::none_of(after.state.corpses, [&](const Corpse &next) { return next.id == corpse.id; }))
+        if (std::ranges::none_of(after.state.corpses, [&](const Corpse &next) { return next.id == corpse.id; })) {
           effects_.push_back({EffectType::Fire, actor ? actor->pos : corpse.pos, corpse.pos,
                               actor ? Height(after, actor->pos) : Height(after, corpse.pos), Height(after, corpse.pos), 0.F, 0.65F, actorDelay, 0, actor ? actor->owner : -1, "INCINERADO"});
+          effects_.back().stagedSpell = actor && actor->type == UnitClass::Caster && hint == Ability::Incinerate;
+          effects_.back().contactSeconds = effects_.back().stagedSpell ? contactDelay : 0.f;
+        }
     }
     for (const auto &cell : after.state.cells) {
       const auto *old = before.At(cell.pos);

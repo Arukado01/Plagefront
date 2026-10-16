@@ -1,4 +1,11 @@
-param([string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot))
+param([string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot), [switch]$Legacy)
+
+# The approved raster sources are the default. Keep the historical procedural
+# generator explicitly available for comparison, never as an accidental overwrite.
+if (-not $Legacy) {
+    & (Join-Path $PSScriptRoot 'Art/BuildApprovedArt.ps1') -ProjectRoot $ProjectRoot
+    return
+}
 
 # Genera arte original con píxeles y agrupaciones enteras a resolución nativa, sin filtros, interpolación, suavizado ni conexión de red.
 $ErrorActionPreference = 'Stop'

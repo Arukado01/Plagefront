@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "generator": "Built-in image_gen",
+  "approved_material_source": "build/art-direction-v1/generated/terrain-materials-concept.png",
+  "approved_prop_source": "build/art-direction-v1/generated/props-concept.png",
+  "supplements": {
+    "materials": {
+      "file": "materials-supplement.png",
+      "prompt": "Use case: stylized-concept. Asset type: original Plaguefront terrain supplement MATERIAL SHEET, 2 by 2 grid of four equally sized rectangular swatches, NO gutters, no labels. Input image is STYLE REFERENCE ONLY: preserve its fantasy tactical pixel art material language but REDUCE contrast and fine noise by half, use broad quiet clusters. Fill each quadrant edge to edge, top surfaces only, no hex outlines, no sidewalls. Top left: Hill limestone plateau ground with irregular pale gray-green exposed stone slabs, thin dirt seams and small moss patches, gentle rocky geology, not a raised hill or boulder object. Top right: Swamp, dark olive mud and shallow still teal-green pools with sparse clumps of bent ochre reeds and duckweed, wet ground only, no trees. Bottom left: DeepWater, cold dark blue-teal river depth with wide calm shadow pools, restrained broken short horizontal pale reflections, less than 10 percent reflection, no shores. Bottom right: Blocked rocky ground, dark gray-green irregular fractured rock plates with a few lighter sharp ridges and moss crevices, no upright objects. Each swatch will be adapted to 48x32 native pixels, so chunky broad pixel clusters at an imagined native 48x32 scale, low visual noise. Colors match existing Plaguefront: stone #394542 #5a6556 #899078 #b1b397, foliage #1d3734 #315444 #4f7250 #79935a, water #1d354b #2a5363 #417981 #83a9a3, soil #493d36 #6b5642, highlights #d7ceaa, ink #101b25. Upper left light, dark cool shadows. Original art, no characters, no text, no blur, no smooth gradients, no antialiasing, no realistic photo texture. Opaque."
+    },
+    "props": {
+      "file": "props-supplement.png",
+      "prompt": "Use case: stylized-concept. Asset type: original Plaguefront ENVIRONMENT PROP SUPPLEMENT SHEET, 2 columns by 2 rows, four isolated props on genuine transparent background. Input image is STYLE REFERENCE ONLY for the approved stone, wood and fantasy tactical pixel art craftsmanship. Top left: impassable clustered rock outcrop, three asymmetrical fractured gray-green limestone spires with pale upper-left faces and deep cool crevices, short moss at feet. Top right: small borderland outpost, a squat fortified stone watchtower behind a short crenellated wall, rust-red small roof with two warm tiny windows and recessed oak doorway; visibly different from the large fortress, NO flags. Bottom left: a fallen anonymous armored soldier laid horizontally, head to left, small muted pale steel helmet, leather boots to right, dropped short sword and shield, a scrap of neutral brown cloth; no gore, no blood. Bottom right: a low sinister putrefaction growth, irregular moss-green diseased root tangle and small fungal bulbs, muted chartreuse glow confined to several fissures, recognizably low organic mound rather than a tree, no bones or extra creatures. Same scale per quadrant, broad chunky authored pixel clusters intended for native 64x80 logical pixels, clean restrained edges, avoid fine texture noise. Elevated three-quarter hex tactical view, verticals vertical, bases centered, two wall planes visible, light upper left. Each prop occupies logical x9..55,y9..68, base at logical(32,68), bottom12px and outer8px negative margin, no platform, no ground tile, no cast shadow, no UI, no text, no labels. Foliage #1d3734 #315444 #4f7250 #79935a; stone #394542 #5a6556 #899078 #b1b397; wood #332e2b #67513b #94734b #c39b60; rot #334535 #647d3c #9fb34f #d5d47a, selective contour #101b25. Original art, not copied from any existing game. True transparent negative space, no checkerboard drawn into image, no gradients, no antialiasing."
+    }
+  },
+  "technical_adaptation": "Tools/Art/BuildEnvironment.py: measured crop boxes, native reduction, existing material ramps, isolated-noise cleanup, bounded detail animation, deterministic variants, binary-alpha packing.",
+  "contract": {
+    "terrain": {
+      "size": [
+        1920,
+        128
+      ],
+      "cell": [
+        48,
+        32
+      ],
+      "anchor": [
+        24,
+        16
+      ],
+      "columns": 40,
+      "rows": 4,
+      "variants": 4,
+      "column_formula": "terrain + 10 * variant",
+      "variant_formula": "bit-exact uint32 coordinate hash in renderer and generator",
+      "fps": 5
+    },
+    "props": {
+      "size": [
+        512,
+        320
+      ],
+      "cell": [
+        64,
+        80
+      ],
+      "anchor": [
+        32,
+        68
+      ],
+      "columns": 8,
+      "rows": 4,
+      "fps": 5
+    }
+  },
+  "rot_source_palette": [
+    "#334535",
+    "#647d3c",
+    "#9fb34f",
+    "#d5d47a"
+  ],
+  "scope": "Environment art and renderer terrain-column selection only. No gameplay/map/camera/control changes."
+}

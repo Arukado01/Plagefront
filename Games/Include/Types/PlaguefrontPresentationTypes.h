@@ -44,6 +44,9 @@ namespace Plaguefront {
     float startHeight{}, endHeight{}, elapsed{}, lifetime{0.45F}, delay{};
     int amount{}, owner{-1};
     std::string text;
+    float contactSeconds{};
+    bool stagedSpell{};
+    std::vector<int> createdFireIds;
     bool Active() const { return delay <= 0.F && elapsed < lifetime; }
     float Progress() const;
   };

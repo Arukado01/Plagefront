@@ -1,5 +1,6 @@
 #include "Managers/AudioManager.h"
 #include "Plaguefront/Audio.h"
+#include "Config/PlaguefrontPresentationConfig.h"
 #include <SFML/Audio/Listener.hpp>
 #include <SFML/Audio/PlaybackDevice.hpp>
 #include <SFML/Audio/SoundBuffer.hpp>
@@ -103,7 +104,11 @@ int main(){try{
       Check(after.Find(1)->hp<before.Find(1)->hp,"AI performed a real damaging action");
       director.Update(1);const std::string cue=caster?"spell_lightning":"sword";
       const auto count=manager.CueStarts(cue);director.Observe(before,after);
-      director.Update(.13f); // El movimiento real retrasa la señal principal hasta después de la marcha.
+      float movementSeconds=0.F;
+      for(const auto &event:after.state.combatEvents)if(!event.counter&&event.chainIndex==0)
+        if(const auto *actor=before.Find(event.attackerId);actor&&actor->pos!=event.from)
+          if(const auto path=before.FindPath(actor->id,event.from))movementSeconds=static_cast<float>(path->cells.size()-1)*AnimationTiming.walkCellSeconds;
+      director.Update(movementSeconds+.01F);
       Check(manager.CueStarts(cue)==count+1,"Final AI activation retains exact weapon or spell cue after round reset");
       director.Update(1);const auto total=manager.EffectStarts();director.Observe(after,after);
       Check(manager.EffectStarts()==total,"Identical post-round snapshot never replays attack or cast");
@@ -120,6 +125,25 @@ int main(){try{
     Check(manager.CueStarts("sword")==blade&&manager.CueStarts("spell_lightning")==spell,"Stale attack log plus environmental damage cannot turn Guard into an attack sound");
     director.Update(1);const auto total=manager.EffectStarts();director.Observe(after,after,Ability::Lightning);
     Check(manager.EffectStarts()==total,"Stale explicit hint without a state transition produces no attack audio");
+  }
+  {
+    using namespace Plaguefront;
+    for(int cells:{1,2}) {
+      director.Update(3.F);auto before=LastActivation(false);before.At({2,0})->terrain=Terrain::Plain;before.Find(2)->pos={cells+1,0};
+      Check(before.BeginActivation(2).ok,"La secuencia de audio usa una activación real con movimiento previo");
+      const auto path=before.FindPath(2,{1,0});Check(path&&path->cells.size()==static_cast<std::size_t>(cells+1),"La ruta de audio contiene las casillas esperadas");
+      auto after=before;Check(after.Move(2,{1,0}).ok&&after.UseAbility(2,Ability::Attack,{0,0}).ok,"La misma instantánea resuelve movimiento y ataque legales");
+      const float walk=static_cast<float>(path->cells.size()-1)*AnimationTiming.walkCellSeconds;
+      const auto swords=manager.CueStarts("sword"),impacts=manager.CueStarts("impact"),moves=manager.CueStarts("move");
+      director.Observe(before,after,Ability::Attack);
+      Check(manager.CueStarts("move")==moves+1&&manager.CueStarts("sword")==swords&&manager.CueStarts("impact")==impacts,"Solo la marcha suena mientras comienza su ciclo completo");
+      director.Update(walk-.001F);Check(manager.CueStarts("sword")==swords&&manager.CueStarts("impact")==impacts,"El arma espera al último marco de la marcha");
+      director.Update(.002F);Check(manager.CueStarts("sword")==swords+1&&manager.CueStarts("impact")==impacts,"El arma comienza en la llegada configurada también por el director visual");
+      director.Update(AnimationTiming.weaponContactSeconds-.002F);Check(manager.CueStarts("impact")==impacts,"El impacto de audio no precede al contacto visual compartido");
+      director.Update(.002F);Check(manager.CueStarts("sword")==swords+1&&manager.CueStarts("impact")==impacts+1,"El impacto suena una sola vez al cruzar el contacto posterior a la llegada");
+      director.Update(3.F);const auto starts=manager.EffectStarts();director.Observe(after,after);director.Update(3.F);
+      Check(manager.EffectStarts()==starts,"Volver a observar la instantánea no repite marcha, arma ni impacto");
+    }
   }
   {
     using namespace Plaguefront;

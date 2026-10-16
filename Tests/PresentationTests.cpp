@@ -1,6 +1,10 @@
 #include "Plaguefront/Presentation.h"
+#include "Plaguefront/Weather.h"
+#include "Plaguefront/SpellPresentation.h"
+#include "Plaguefront/UnitPresentation.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <functional>
 #include <iostream>
@@ -186,12 +190,164 @@ void TopPicking() {
 void IdleClockAndImmutability() {
   auto match=Board();const int id=Add(match,0,UnitClass::Saber,{});AnimationDirector director;director.Reset(match);
   const auto original=LogicalFingerprint(match);
-  director.Update(0.23F);const auto first=director.VisualFor(id,*match.Find(id));Check(first.frame==2,"Idle advances to a distinct frame");
+  const float twoFrames=AnimationTiming.idleFrameSeconds*2.F+.001F;
+  director.Update(twoFrames);const auto first=director.VisualFor(id,*match.Find(id));Check(first.frame==2,"Idle advances to a distinct frame");
   director.Observe(match,match);Near(director.VisualFor(id,*match.Find(id)).elapsed,first.elapsed,"No-change Observe preserves idle phase");
-  director.Update(0.23F);Check(director.VisualFor(id,*match.Find(id)).frame==4,"Idle continues instead of resetting on each snapshot");
+  director.Update(twoFrames);Check(director.VisualFor(id,*match.Find(id)).frame==4,"Idle continues instead of resetting on each snapshot");
   Check(!director.Busy(),"Idle loop does not block tactical input");
   director.Update(std::numeric_limits<float>::quiet_NaN());
   Check(LogicalFingerprint(match)==original,"Presentation cannot alter logical state");
+}
+void IdleTemporalCycleAllClassesAndFacings() {
+  const std::array<Hex,4> destinations{{{1,0},{-1,1},{1,-1},{-1,0}}};
+  for(int owner=0;owner<2;++owner)for(int cls=0;cls<7;++cls)for(int facing=0;facing<4;++facing) {
+    auto match=Board();match.state.currentPlayer=owner;
+    const int id=Add(match,owner,static_cast<UnitClass>(cls),{});Ok(match.BeginActivation(id));
+    AnimationDirector director;director.Reset(match);const Match before=match;
+    Ok(match.Move(id,destinations[static_cast<std::size_t>(facing)]));director.Observe(before,match);
+    director.Update(AnimationTiming.walkCellSeconds+.0001f);
+    auto visual=director.VisualFor(id,*match.Find(id));
+    Check(visual.state==AnimState::Idle&&visual.facing==facing,"Caminar deja el idle en la orientación real del trayecto");
+    const auto logical=LogicalFingerprint(match);const auto position=visual;
+    director.Update(AnimationTiming.idleFrameSeconds*.5f);
+    for(int sample=0;sample<AnimationTiming.frames*2;++sample) {
+      if(sample)director.Update(AnimationTiming.idleFrameSeconds);
+      visual=director.VisualFor(id,*match.Find(id));
+      Check(visual.frame==sample%AnimationTiming.frames,"Idle reproduce dos ciclos ordenados con el intervalo configurado");
+      Check(visual.state==AnimState::Idle&&visual.facing==facing&&visual.visible,"Idle conserva estado, orientación y visibilidad en cada muestra");
+      Near(visual.q,position.q,"Idle no desplaza la coordenada Q");Near(visual.r,position.r,"Idle no desplaza la coordenada R");
+      Near(visual.elevation,position.elevation,"Idle no altera la elevación del anclaje");
+      director.Observe(match,match);
+      Near(director.VisualFor(id,*match.Find(id)).elapsed,visual.elapsed,"Observar la misma partida no reinicia un ciclo idle");
+      Check(!director.Busy()&&LogicalFingerprint(match)==logical,"Idle no bloquea entradas ni avanza el estado táctico");
+    }
+  }
+  auto match=Board();const int id=Add(match,0,UnitClass::Saber,{});AnimationDirector director;director.Reset(match);
+  director.Update(AnimationTiming.idleFrameSeconds-.001f);Check(director.VisualFor(id,*match.Find(id)).frame==0,"Idle mantiene el marco hasta completar su intervalo");
+  director.Update(.002f);Check(director.VisualFor(id,*match.Find(id)).frame==1,"Idle cambia el marco al cruzar su intervalo");
+}
+void RainViewportMotionAndBounds() {
+  for(const auto size:{Point{286.f,260.f},Point{486.f,320.f},Point{760.f,480.f},Point{1220.f,720.f}})for(bool storm:{false,true}) {
+    const auto first=RainDrops(size.x,size.y,.25f,storm),same=RainDrops(size.x,size.y,.25f,storm),next=RainDrops(size.x,size.y,.33f,storm);
+    Check(first.size()>=64&&first.size()<=360&&first.size()==same.size()&&first.size()==next.size(),"La cantidad de lluvia está acotada por vista y no crece con el tiempo");
+    std::array<int,16> coverage{};std::set<int> layers,opacities;int moving=0;
+    for(std::size_t i=0;i<first.size();++i) {
+      const auto &drop=first[i],&repeat=same[i],&after=next[i];
+      Check(std::isfinite(drop.head.x)&&std::isfinite(drop.head.y)&&std::isfinite(drop.tail.x)&&std::isfinite(drop.tail.y),"La lluvia contiene únicamente coordenadas finitas");
+      Check(drop.head.x>=0&&drop.head.x<size.x&&drop.head.y>=0&&drop.head.y<size.y,"Las gotas cubren el viewport nativo sin depender de la cámara");
+      Check(drop.head.x==repeat.head.x&&drop.head.y==repeat.head.y&&drop.tail.x==repeat.tail.x&&drop.tail.y==repeat.tail.y,"La misma fase produce lluvia determinista");
+      const float dx=drop.tail.x-drop.head.x,dy=drop.tail.y-drop.head.y;
+      Check(dy<0&&dx>0&&std::hypot(dx,dy)>=3.f&&std::hypot(dx,dy)<=16.f,"La cola del trazo sigue la trayectoria descendente con viento");
+      Check(drop.opacity>0&&drop.layer<3,"Las capas de lluvia tienen opacidad visible y un índice válido");
+      layers.insert(drop.layer);opacities.insert(drop.opacity);
+      const int x=std::min(3,static_cast<int>(drop.head.x*4/size.x)),y=std::min(3,static_cast<int>(drop.head.y*4/size.y));
+      ++coverage[static_cast<std::size_t>(y*4+x)];
+      moving+=drop.head.x!=after.head.x||drop.head.y!=after.head.y;
+    }
+    Check(std::ranges::all_of(coverage,[](int count){return count>0;}),"La lluvia ocupa las dieciséis regiones de la vista");
+    Check(layers.size()==3&&opacities.size()>=3,"Tres profundidades distinguen los trazos sin aumentar partículas");
+    Check(moving==static_cast<int>(first.size()),"Todas las gotas avanzan entre dos instantes reales");
+    for(float elapsed:{-8.f,0.f,10000.f}) {
+      const auto drops=RainDrops(size.x,size.y,elapsed,storm);
+      Check(drops.size()==first.size(),"El reloj de lluvia no altera el presupuesto de partículas");
+      for(const auto &drop:drops)Check(drop.head.x>=0&&drop.head.x<size.x&&drop.head.y>=0&&drop.head.y<size.y,"El módulo positivo conserva cobertura con tiempos negativos o largos");
+    }
+  }
+  for(const auto size:{Point{},Point{-1.f,320.f},Point{480.f,0.f},Point{std::numeric_limits<float>::infinity(),320.f}})
+    Check(RainDrops(size.x,size.y,0).empty(),"Una vista inválida no genera partículas");
+  Check(RainDrops(480,320,std::numeric_limits<float>::quiet_NaN()).empty(),"Un reloj inválido no genera coordenadas de lluvia inválidas");
+}
+void SpellStagesPreserveContactAndFiniteLifetime() {
+  for(EffectType type:{EffectType::Fire,EffectType::Ice,EffectType::Lightning,EffectType::Heal,EffectType::Purify}) {
+    VisualEffect effect;effect.type=type;effect.start={};effect.end={2,0};effect.stagedSpell=true;
+    effect.contactSeconds=AnimationTiming.spellContactSeconds;effect.lifetime=effect.contactSeconds+.42f;
+    const std::array<std::pair<float,SpellStage>,5> samples{{
+      {effect.contactSeconds*.2f,SpellStage::Preparation},{effect.contactSeconds*.525f,SpellStage::Launch},
+      {effect.contactSeconds*.8f,SpellStage::Travel},{effect.contactSeconds+.42f*.2f,SpellStage::Impact},
+      {effect.contactSeconds+.42f*.85f,SpellStage::Fade}}};
+    for(const auto &[time,stage]:samples) {
+      effect.elapsed=time;const auto sample=SampleSpell(effect);
+      Check(sample.stage==stage,"El muestreador recorre preparación, lanzamiento, viaje, impacto y desvanecimiento en orden");
+      Check(sample.phase>=0&&sample.phase<=1&&sample.travel>=0&&sample.travel<=1&&sample.impact>=0&&sample.impact<=1,"Las fases mágicas permanecen normalizadas");
+      Check(sample.projectile==(type==EffectType::Fire||type==EffectType::Ice),"Solo Fire e Ice comunican un proyectil en trayectoria");
+    }
+    effect.elapsed=effect.contactSeconds-.0001f;Check(SampleSpell(effect).stage==SpellStage::Travel,"La magia no impacta antes del contacto existente");
+    effect.elapsed=effect.contactSeconds;Check(SampleSpell(effect).stage==SpellStage::Impact,"El impacto empieza exactamente en el contacto existente");
+    effect.elapsed=effect.lifetime;Check(!effect.Active(),"Una magia termina en su límite sin partículas huérfanas");
+  }
+  for(Ability ability:{Ability::Attack,Ability::Fire,Ability::Ice,Ability::Lightning}) {
+    auto match=Board();const int caster=Add(match,0,UnitClass::Caster,{});Add(match,1,UnitClass::Saber,{2,0});
+    Ok(match.BeginActivation(caster));AnimationDirector director;director.Reset(match);const Match before=match;
+    Ok(match.UseAbility(caster,ability,{2,0}));const auto committed=LogicalFingerprint(match);director.Observe(before,match,ability);
+    const auto spell=std::ranges::find_if(director.Effects(),[](const VisualEffect &effect){return effect.stagedSpell;});
+    const auto damage=std::ranges::find_if(director.Effects(),[](const VisualEffect &effect){return effect.type==EffectType::Damage;});
+    Check(spell!=director.Effects().end()&&damage!=director.Effects().end(),"Cada golpe mágico real conserva un único efecto y su aviso de daño");
+    Near(spell->delay+spell->contactSeconds,damage->delay,"La preparación visual conserva el instante del contacto del aviso de daño");
+    Near(spell->delay+spell->lifetime,damage->delay+.42f,"La magia conserva el final anterior y no prolonga el bloqueo de entradas");
+    const auto count=director.Effects().size();director.Observe(match,match);
+    Check(director.Effects().size()==count,"Observar otra vez el mismo golpe no duplica magia ni impactos");
+    director.Update(3.f);Check(director.Effects().empty()&&!director.Busy(),"La cola de magia se vacía y devuelve el control táctico");
+    Check(LogicalFingerprint(match)==committed,"Las etapas visuales no vuelven a aplicar el daño ya resuelto");
+  }
+}
+void NewFireWaitsForContactWithoutHidingExistingFire() {
+  for(bool previousFire:{false,true}) {
+    auto match=Board();const int caster=Add(match,0,UnitClass::Caster,{});const Hex target{2,0};Add(match,1,UnitClass::Saber,target);
+    int existingId=-1;
+    if(previousFire) {
+      existingId=match.state.nextId++;
+      match.state.fires.push_back({existingId,target,1,0});
+    }
+    Ok(match.BeginActivation(caster));AnimationDirector director;director.Reset(match);const Match before=match;
+    Ok(match.UseAbility(caster,Ability::Fire,target));const auto committed=LogicalFingerprint(match);director.Observe(before,match,Ability::Fire);
+    const auto spell=std::ranges::find_if(director.Effects(),[](const VisualEffect &effect){return effect.stagedSpell&&effect.type==EffectType::Fire;});
+    const auto damage=std::ranges::find_if(director.Effects(),[](const VisualEffect &effect){return effect.type==EffectType::Damage;});
+    Check(spell!=director.Effects().end()&&damage!=director.Effects().end(),"Fire conserva su único proyectil primario y el aviso de daño");
+    const float contact=spell->delay+spell->contactSeconds;
+    Near(contact,damage->delay,"El incendio nuevo conserva el contacto existente del impacto Fire");
+    Near(spell->delay+spell->lifetime,damage->delay+.42f,"Ocultar el suelo incendiado no prolonga el efecto Fire");
+    std::size_t created=0;
+    for(const auto &fire:match.state.fires) {
+      const bool existed=std::ranges::any_of(before.state.fires,[&](const FireZone &old){return old.id==fire.id;});
+      Check(FireAwaitsContact(fire,director.Effects())==!existed,"Solo los incendios recién creados esperan al contacto, también en el área del hechizo");
+      created+=!existed;
+      if(fire.id==existingId) Check(fire.remaining==match.config.fireDuration,"Refrescar un incendio conserva su identidad y su representación visible");
+    }
+    Check(created==spell->createdFireIds.size()&&created>0,"El efecto primario registra cada zona nueva real una sola vez");
+    director.Update(contact-.001f);
+    for(const auto &fire:match.state.fires) Check(FireAwaitsContact(fire,director.Effects())==(fire.id!=existingId),"El suelo nuevo no arde visualmente antes del contacto");
+    director.Update(.002f);
+    for(const auto &fire:match.state.fires) Check(!FireAwaitsContact(fire,director.Effects()),"Al llegar el impacto se muestran todas las zonas incendiadas reales");
+    Check(LogicalFingerprint(match)==committed,"Esperar el contacto del incendio no vuelve a resolver daño ni cambia la partida");
+    director.Update(3.f);Check(!director.Busy()&&director.Effects().empty(),"La señal de incendio nuevo se descarta con su efecto finito");
+  }
+  auto match=Board();const int caster=Add(match,0,UnitClass::Caster,{});Add(match,1,UnitClass::Saber,{3,0});
+  Ok(match.BeginActivation(caster));AnimationDirector director;director.Reset(match);const Match beforeMove=match;
+  Ok(match.Move(caster,{1,0}));director.Observe(beforeMove,match);const Match beforeFire=match;
+  Ok(match.UseAbility(caster,Ability::Fire,{3,0}));director.Observe(beforeFire,match,Ability::Fire);
+  const auto spell=std::ranges::find_if(director.Effects(),[](const VisualEffect &effect){return effect.stagedSpell&&effect.type==EffectType::Fire;});
+  Check(spell!=director.Effects().end()&&spell->delay>0.f,"El Fire posterior a un movimiento conserva su espera real en la cola");
+  for(const auto &fire:match.state.fires) Check(FireAwaitsContact(fire,director.Effects()),"La zona nueva permanece oculta también durante la espera anterior a la preparación");
+}
+void NonCasterSupportRetainsOriginalEffects() {
+  for(UnitClass type:{UnitClass::Saber,UnitClass::Caster}) for(bool purifier:{false,true}) {
+    if(type==UnitClass::Caster&&!purifier) continue;
+    auto match=Board();const int saber=Add(match,0,type,{});Add(match,1,UnitClass::Saber,{4,0});const Hex target{1,0};
+    if(purifier) {
+      match.state.sources.push_back({match.state.nextId++,target,4});
+      match.Find(saber)->inventory.push_back(Item::Purifier);
+    } else match.state.corpses.push_back({match.state.nextId++,target,match.state.round,1,UnitClass::Saber,-1});
+    Ok(match.BeginActivation(saber));AnimationDirector director;director.Reset(match);const Match before=match;
+    if(purifier) Ok(match.UseItem(saber,0,target));
+    else Ok(match.UseAbility(saber,Ability::Incinerate,target));
+    const auto committed=LogicalFingerprint(match);director.Observe(before,match);
+    const auto type=purifier?EffectType::Purify:EffectType::Fire;
+    const auto effect=std::ranges::find_if(director.Effects(),[&](const VisualEffect &value){return value.type==type;});
+    Check(effect!=director.Effects().end()&&!effect->stagedSpell,"El kit de cualquier clase y la incineración física conservan su efecto original sin preparación de Caster");
+    Near(effect->contactSeconds,0.f,"El soporte no mágico no añade un contacto nuevo");Near(effect->lifetime,.65f,"El soporte no mágico conserva su duración anterior");
+    Check(effect->createdFireIds.empty(),"Incinerar un cadáver no inventa zonas de incendio persistente");
+    director.Update(3.f);Check(!director.Busy()&&LogicalFingerprint(match)==committed,"El soporte visual termina sin repetir el uso de objeto o habilidad");
+  }
 }
 void LegalWalkInterpolation() {
   auto match=Board();const int id=Add(match,0,UnitClass::Rider,{});
@@ -204,13 +360,249 @@ void LegalWalkInterpolation() {
   Check(match.Find(id)->pos==Hex{2,0} && visual.state==AnimState::Walk,"Logic commits immediately while walk presentation starts");
   Near(visual.q,0,"Walk begins at previous logical Q");Near(visual.r,0,"Walk begins at previous logical R");
   Check(visual.path==path->cells,"Visual follows actual weighted legal route");
-  director.Update(0.06F);visual=director.VisualFor(id,*match.Find(id));
+  director.Update(AnimationTiming.walkCellSeconds*.5F);visual=director.VisualFor(id,*match.Find(id));
   Near(visual.q,static_cast<float>(path->cells[1].q)*0.5F,"Half-step Q interpolation");
   Near(visual.r,static_cast<float>(path->cells[1].r)*0.5F,"Half-step R interpolation");
-  director.Update(0.03F);Check(director.VisualFor(id,*match.Find(id)).frame==1,"Walk cycles a distinct animation frame");
-  director.Update(2.F);visual=director.VisualFor(id,*match.Find(id));
+  Check(visual.frame==AnimationTiming.frames/2,"Walk cycles a distinct animation frame");
+  director.Update(static_cast<float>(path->cells.size()-1)*AnimationTiming.walkCellSeconds);visual=director.VisualFor(id,*match.Find(id));
   Check(visual.state==AnimState::Idle,"Walk finishes in idle");Near(visual.q,2,"Walk reaches committed Q");Near(visual.elevation,2,"Walk interpolates and reaches destination elevation");
   Check(LogicalFingerprint(match)==afterFingerprint,"Animation elapsed time does not advance rules or turns");
+}
+void CompleteWalkCyclePerCell() {
+  Near(AnimationTiming.walkCellSeconds,AnimationTiming.frames*AnimationTiming.walkFrameSeconds,"Una casilla dura exactamente un ciclo de marcha");
+  const std::array<Hex,4> destinations{{{1,0},{-1,1},{1,-1},{-1,0}}};
+  for(int owner=0;owner<2;++owner)for(int cls=0;cls<7;++cls)for(int facing=0;facing<4;++facing) {
+    auto match=Board();match.state.currentPlayer=owner;
+    const int id=Add(match,owner,static_cast<UnitClass>(cls),{});const auto destination=destinations[static_cast<std::size_t>(facing)];
+    match.At(destination)->height=1;Ok(match.BeginActivation(id));const Match before=match;
+    AnimationDirector director;director.Reset(before);Ok(match.Move(id,destination));director.Observe(before,match);
+    const auto committed=LogicalFingerprint(match);std::set<int> frames;float elapsed=0.F;
+    for(int frame=0;frame<AnimationTiming.frames;++frame) {
+      const float target=(static_cast<float>(frame)+.5F)*AnimationTiming.walkFrameSeconds;
+      director.Update(target-elapsed);elapsed=target;const auto visual=director.VisualFor(id,*match.Find(id));
+      const float fraction=target/AnimationTiming.walkCellSeconds;frames.insert(visual.frame);
+      Check(visual.state==AnimState::Walk&&visual.frame==frame&&visual.facing==facing,"Cada marcha de una casilla muestra sus ocho marcos en orden y orientación");
+      Near(visual.q,destination.q*fraction,"La marcha avanza Q durante todos sus marcos");
+      Near(visual.r,destination.r*fraction,"La marcha avanza R durante todos sus marcos");
+      Near(visual.elevation,fraction,"La marcha sube de forma continua mientras reproduce el ciclo");
+      Check(director.Busy()&&LogicalFingerprint(match)==committed,"La marcha bloquea solo su presentación y conserva la partida ya resuelta");
+    }
+    Check(frames.size()==static_cast<std::size_t>(AnimationTiming.frames),"No se omite ningún marco al recorrer una sola casilla");
+    director.Update(AnimationTiming.walkCellSeconds-.001F-elapsed);const auto arriving=director.VisualFor(id,*match.Find(id));
+    Check(arriving.state==AnimState::Walk&&arriving.frame==AnimationTiming.frames-1,"El último marco permanece visible hasta llegar");
+    director.Update(.002F);const auto idle=director.VisualFor(id,*match.Find(id));
+    Check(idle.state==AnimState::Idle&&idle.frame==0&&idle.facing==facing&&!director.Busy(),"La llegada inicia idle sin una marcha residual");
+    Near(idle.q,static_cast<float>(destination.q),"La llegada conserva Q exacta");Near(idle.r,static_cast<float>(destination.r),"La llegada conserva R exacta");
+    Near(idle.elevation,1.F,"La llegada conserva la altura final");Near(idle.elapsed,.001F,"Idle recibe únicamente el tiempo sobrante de la llegada");
+    Camera camera;const auto a=camera.ProjectContinuous(arriving.q,arriving.r,arriving.elevation),b=camera.ProjectContinuous(idle.q,idle.r,idle.elevation);
+    Check(std::hypot(b.x-a.x,b.y-a.y)<.2F,"El último intervalo llega a idle sin salto del anclaje proyectado");
+    director.Update(AnimationTiming.idleFrameSeconds);
+    Check(director.VisualFor(id,*match.Find(id)).frame==1&&LogicalFingerprint(match)==committed,"Idle continúa su reloj en el destino sin repetir la orden");
+  }
+}
+void MultiSegmentWalkContinuity() {
+  auto match=Board();const std::vector<Hex> route{{0,0},{0,1},{1,1},{2,0}};
+  for(auto &cell:match.state.cells)cell.terrain=Terrain::Blocked;
+  for(const auto pos:route)match.At(pos)->terrain=Terrain::Plain;
+  match.At({1,1})->height=1;match.At({2,0})->height=1;
+  const int id=Add(match,0,UnitClass::Rider,{});Ok(match.BeginActivation(id));const Match before=match;
+  const auto path=before.FindPath(id,route.back());Check(path&&path->cells==route,"La ruta legal de prueba obliga a cambiar de dirección y altura");
+  AnimationDirector director;director.Reset(before);Ok(match.Move(id,route.back()));director.Observe(before,match);
+  const auto committed=LogicalFingerprint(match);const int cost=path->cost,steps=match.Find(id)->stepsMoved;
+  const std::array<int,3> expectedFacings{{0,0,2}};float elapsed=0.F;
+  for(std::size_t segment=0;segment+1<route.size();++segment) {
+    std::set<int> frames;const auto from=route[segment],to=route[segment+1];
+    const float a=static_cast<float>(before.At(from)->height),b=static_cast<float>(before.At(to)->height);
+    for(int frame=0;frame<AnimationTiming.frames;++frame) {
+      const float fraction=(static_cast<float>(frame)+.5F)/static_cast<float>(AnimationTiming.frames);
+      const float target=(static_cast<float>(segment)+fraction)*AnimationTiming.walkCellSeconds;
+      director.Update(target-elapsed);elapsed=target;const auto visual=director.VisualFor(id,*match.Find(id));frames.insert(visual.frame);
+      Check(visual.state==AnimState::Walk&&visual.frame==frame&&visual.facing==expectedFacings[segment],"Cada tramo completa el ciclo y toma la orientación del siguiente vecino");
+      Near(visual.q,from.q+(to.q-from.q)*fraction,"Q sigue el tramo legal sin atajar el giro");
+      Near(visual.r,from.r+(to.r-from.r)*fraction,"R sigue el tramo legal sin atajar el giro");
+      Near(visual.elevation,a+(b-a)*fraction,"La altura se interpola entre los dos apoyos reales del tramo");
+    }
+    Check(frames.size()==static_cast<std::size_t>(AnimationTiming.frames),"Cada casilla de una ruta larga conserva los ocho marcos");
+    const float boundary=static_cast<float>(segment+1)*AnimationTiming.walkCellSeconds;
+    director.Update(boundary-.001F-elapsed);const auto left=director.VisualFor(id,*match.Find(id));
+    director.Update(.002F);elapsed=boundary+.001F;const auto right=director.VisualFor(id,*match.Find(id));
+    Check(std::abs(right.q-left.q)<.01F&&std::abs(right.r-left.r)<.01F&&std::abs(right.elevation-left.elevation)<.01F,"Cruzar el vértice de la ruta no salta posición ni altura");
+  }
+  const auto idle=director.VisualFor(id,*match.Find(id));Check(idle.state==AnimState::Idle&&idle.facing==2&&!director.Busy(),"La ruta termina en idle con la última orientación");
+  Near(idle.q,2.F,"La ruta completa llega a Q");Near(idle.r,0.F,"La ruta completa llega a R");Near(idle.elevation,1.F,"La ruta completa llega a su altura");
+  Check(match.Find(id)->stepsMoved==steps&&before.FindPath(id,route.back())->cost==cost&&LogicalFingerprint(match)==committed,"Reproducir la ruta no modifica pasos, coste ni estado táctico");
+}
+void MoveThenAttackContactUsesSharedTiming() {
+  for(int cells:{1,2}) {
+    auto match=Board();const int actor=Add(match,0,UnitClass::Saber,{}),target=Add(match,1,UnitClass::Archer,{cells+1,0});
+    Ok(match.BeginActivation(actor));const Match before=match;const auto path=before.FindPath(actor,{cells,0});
+    Check(path&&path->cells.size()==static_cast<std::size_t>(cells+1),"El movimiento previo al ataque tiene una ruta legal conocida");
+    Ok(match.Move(actor,{cells,0}));Ok(match.UseAbility(actor,Ability::Attack,{cells+1,0}));
+    AnimationDirector director;director.Reset(before);director.Observe(before,match,Ability::Attack);
+    const auto committed=LogicalFingerprint(match);const float walk=static_cast<float>(path->cells.size()-1)*AnimationTiming.walkCellSeconds;
+    const auto damage=std::ranges::find_if(director.Effects(),[&](const VisualEffect &effect){return effect.type==EffectType::Damage&&effect.end==match.Find(target)->pos;});
+    Check(damage!=director.Effects().end(),"El ataque real crea una reacción visual de daño");
+    Near(damage->delay,walk+AnimationTiming.weaponContactSeconds,"El contacto comparte el tiempo de marcha usado por la secuencia de audio");
+    director.Update(walk-.001F);Check(director.VisualFor(actor,*match.Find(actor)).state==AnimState::Walk&&director.VisualFor(target,*match.Find(target)).state==AnimState::Idle,"Ni arma ni víctima anticipan la llegada de la marcha");
+    director.Update(.002F);auto visual=director.VisualFor(actor,*match.Find(actor));
+    Check(visual.state==AnimState::Attack&&visual.frame==0,"El ataque empieza después del último marco de marcha");
+    Near(visual.q,static_cast<float>(cells),"El ataque se origina en la casilla final");Near(visual.elapsed,.001F,"El ataque recibe solo el sobrante de marcha");
+    director.Update(AnimationTiming.weaponContactSeconds-.002F);Check(director.VisualFor(target,*match.Find(target)).state==AnimState::Idle,"La víctima espera al contacto configurado");
+    director.Update(.002F);Check(director.VisualFor(target,*match.Find(target)).state==AnimState::Hurt,"La víctima reacciona al mismo contacto posterior a la llegada");
+    director.Update(3.F);Check(!director.Busy()&&LogicalFingerprint(match)==committed,"La secuencia completa no repite movimiento, ataque ni resolución lógica");
+  }
+}
+void UnitContactSupportAndSharedAnchor() {
+  for(int cls=0;cls<7;++cls)for(const auto state:{AnimState::Idle,AnimState::Walk,AnimState::Attack,AnimState::Hurt,AnimState::Death,AnimState::Cast})for(int frame=0;frame<AnimationTiming.frames;++frame) {
+    const auto type=static_cast<UnitClass>(cls);const auto window=UnitContactWindow(type,state,0,frame);
+    Check(window.left>=0&&window.top>=0&&window.right<=48&&window.bottom<=64&&window.left<window.right&&window.top<window.bottom,"La ventana de apoyo pertenece a la celda nativa de cada estado");
+    std::array<std::uint8_t,48*64> alpha{};Check(!UnitContactGeometry(type,state,0,frame,alpha).valid,"Un marco sin apoyo visible no inventa una sombra");
+    const int left=window.left+2,right=window.right-5,bottom=window.bottom-2;
+    for(int y=bottom-2;y<bottom;++y)for(int x=0;x<3;++x) {
+      alpha[static_cast<std::size_t>(y*48+left+x)]=255;
+      alpha[static_cast<std::size_t>(y*48+right+x)]=255;
+    }
+    const auto contact=UnitContactGeometry(type,state,0,frame,alpha);
+    Check(contact.valid&&contact.left==left&&contact.right==right+3&&contact.bottom==bottom,"El contacto mide los dos apoyos opacos del marco");
+    Check(contact.shadowTop==contact.bottom-1&&contact.shadowHeight>=2&&contact.shadowHeight<=3,"La sombra se solapa con la última fila de apoyo sin dejar un píxel transparente");
+    Check(contact.shadowWidth<contact.right-contact.left&&contact.shadowLeft>=1&&contact.shadowLeft+contact.shadowWidth<=47,"La sombra compacta permanece dentro de la celda y debajo del cuerpo");
+    std::array<std::uint8_t,48*64> mirrored{};
+    for(int y=0;y<64;++y)for(int x=0;x<48;++x)mirrored[static_cast<std::size_t>(y*48+47-x)]=alpha[static_cast<std::size_t>(y*48+x)];
+    const auto opposite=UnitContactGeometry(type,state,1,frame,mirrored);
+    Check(opposite.valid&&opposite.left==48-contact.right&&opposite.right==48-contact.left&&opposite.bottom==contact.bottom,"El apoyo reflejado conserva los pies y su altura");
+    Check(opposite.shadowLeft==48-contact.shadowLeft-contact.shadowWidth&&opposite.shadowWidth==contact.shadowWidth&&opposite.shadowTop==contact.shadowTop,"Reflejar orientación refleja exactamente el suelo de la sombra");
+    alpha[63*48]=alpha[63*48+47]=255;
+    alpha[static_cast<std::size_t>((window.top-1)*48+24)]=255;
+    const auto armed=UnitContactGeometry(type,state,0,frame,alpha);
+    Check(armed.left==contact.left&&armed.right==contact.right&&armed.bottom==contact.bottom&&armed.shadowLeft==contact.shadowLeft&&armed.shadowTop==contact.shadowTop&&armed.shadowWidth==contact.shadowWidth,"Un arma fuera de la ventana no arrastra la sombra hacia su extremo");
+    Camera camera;camera.SetRotation(frame%6);camera.CenterOn({-1,2},1.F,{120.F,90.F});camera.PanBy({-13.F,17.F});
+    for(int zoom=1;zoom<=3;++zoom) {
+      camera.SetZoom(zoom,{121.F,89.F});const auto projected=camera.ProjectContinuous(-1.375F,2.625F,1.25F),point=SnapUnitPoint(projected);
+      Near(point.x,std::round(projected.x),"El anclaje compartido redondea X una sola vez");Near(point.y,std::round(projected.y),"El anclaje compartido redondea Y una sola vez");
+      const float spriteBottom=point.y+(contact.bottom-56)*zoom,shadowTop=point.y+(contact.shadowTop-56)*zoom;
+      Near(spriteBottom-shadowTop,static_cast<float>(zoom),"La última fila del pie y el inicio de la sombra se solapan a todos los zoom");
+      Near((point.x-14.F*zoom)-point.x,-14.F*zoom,"La insignia de suelo conserva el mismo anclaje redondeado durante cámara y movimiento");
+      Check(std::abs(point.x-projected.x)<=.5F&&std::abs(point.y-projected.y)<=.5F,"El redondeo compartido no añade deriva subpíxel al sprite");
+    }
+  }
+  std::array<std::uint8_t,48*64> alpha{};alpha[55*48+24]=255;
+  Check(!UnitContactGeometry(static_cast<UnitClass>(-1),AnimState::Idle,0,0,alpha).valid,"Una clase inválida no accede a máscaras ajenas");
+  Near(SnapUnitPoint({-1.5F,-1.49F}).x,-2.F,"El anclaje mantiene el redondeo nativo con coordenadas negativas");
+  Near(SnapUnitPoint({-1.5F,-1.49F}).y,-1.F,"El anclaje negativo no introduce un desplazamiento entero extra");
+}
+void LowerBandSurfaceIntersection() {
+  const auto tinySurface=[](Point center) {
+    std::array<Point,6> surface{};
+    for(std::size_t index=0;index<surface.size();++index)surface[index]={center.x+TopOffsets[index].x*.01F,center.y+TopOffsets[index].y*.01F};
+    return surface;
+  };
+  const std::array<std::pair<Rect,bool>,9> cases{{
+    {{-1,-1,2,2},true},{{-30,-1,60,2},true},{{-1,-30,2,60},true},{{-30,-30,60,60},true},
+    {{19,-13,1,1},false},{{9,-15,1,1},false},{{-21,-1,1,2},false},{{20,-1,1,2},false},{{10,-14,1,1},true}
+  }};
+  for(int zoom=1;zoom<=3;++zoom)for(const auto origin:{Point{},Point{-53,29},Point{137,-81}}) {
+    std::array<Point,6> surface{};
+    for(std::size_t index=0;index<surface.size();++index)surface[index]={origin.x+TopOffsets[index].x*zoom,origin.y+TopOffsets[index].y*zoom};
+    for(const auto &[rectangle,expected]:cases) {
+      const Rect transformed{origin.x+rectangle.left*zoom,origin.y+rectangle.top*zoom,rectangle.width*zoom,rectangle.height*zoom};
+      Check(UnitSurfaceTouchesRect(transformed,surface)==expected,"SAT distingue solapamiento real, borde sin área y esquina vacía del hexágono");
+      auto reversed=surface;std::ranges::reverse(reversed);
+      Check(UnitSurfaceTouchesRect(transformed,reversed)==expected,"La intersección convexa no depende del sentido de los vértices");
+    }
+  }
+  Check(!UnitSurfaceTouchesRect({0,0,0,1},TopOffsets)&&!UnitSurfaceTouchesRect({0,0,1,-1},TopOffsets),"Un rectángulo sin superficie no altera la prioridad de dibujo");
+  Check(!UnitSurfaceTouchesRect({std::numeric_limits<float>::quiet_NaN(),0,1,1},TopOffsets),"Una posición de rectángulo no finita no produce una intersección");
+  auto invalidSurface=TopOffsets;invalidSurface[2].x=std::numeric_limits<float>::infinity();
+  Check(!UnitSurfaceTouchesRect({0,0,1,1},invalidSurface),"Una superficie no finita no adelanta una unidad");
+
+  std::array<std::uint8_t,48*64> alpha{};
+  alpha[43*48+24]=255;alpha[44*48]=1;alpha[53*48+38]=255;alpha[63*48+47]=255;
+  const auto band=UnitLowerBandGeometry(alpha);
+  Check(band[0]==1&&band[9]==(std::uint64_t{1}<<38)&&band[19]==(std::uint64_t{1}<<47),"La banda incluye alfa tenue, punta del arma y última fila sin desplazar bits");
+  int count=0;for(const auto row:band)count+=std::popcount(row);
+  Check(count==3,"La máscara conserva solo las veinte filas inferiores y excluye la fila 43");
+  const UnitLowerBand emptyBand{};const UnitContact noContact{};
+  for(int zoom=1;zoom<=3;++zoom)for(const auto anchor:{Point{},Point{-17,29},Point{73,-41}}) {
+    const auto at=[&](float x,float y) {return tinySurface({anchor.x+x*zoom,anchor.y+y*zoom});};
+    Check(UnitLowerBandTouchesSurface(band,noContact,anchor,zoom,-1,at(14.5F,-2.5F)),"La banda detecta el píxel inferior de una espada fuera de la ventana de pies");
+    Check(UnitLowerBandTouchesSurface(band,noContact,anchor,zoom,-1,at(-23.5F,-11.5F))&&UnitLowerBandTouchesSurface(band,noContact,anchor,zoom,-1,at(23.5F,7.5F)),"La banda incluye los extremos izquierdo y derecho a cualquier escala");
+    Check(!UnitLowerBandTouchesSurface(band,noContact,anchor,zoom,-1,at(15.5F,-2.5F)),"Un hueco transparente junto al arma no cuenta como apoyo inferior");
+    Check(!UnitLowerBandTouchesSurface(emptyBand,noContact,anchor,zoom,-1,at(.5F,.5F)),"Una banda vacía sin sombra ni marca no intersecta el suelo");
+    Check(UnitLowerBandTouchesSurface(emptyBand,noContact,anchor,zoom,0,at(-12.5F,3.5F))&&!UnitLowerBandTouchesSurface(emptyBand,noContact,anchor,zoom,1,at(-12.5F,3.5F)),"La cruz azul conserva su barra vertical independiente del cuerpo");
+    Check(!UnitLowerBandTouchesSurface(emptyBand,noContact,anchor,zoom,0,at(-13.5F,3.5F))&&UnitLowerBandTouchesSurface(emptyBand,noContact,anchor,zoom,1,at(-13.5F,3.5F)),"Las dos barras rojas usan su propia ocupación de suelo");
+    UnitContact shadow;shadow.valid=true;shadow.shadowLeft=18;shadow.shadowTop=55;shadow.shadowWidth=12;shadow.shadowHeight=2;
+    Check(UnitLowerBandTouchesSurface(emptyBand,shadow,anchor,zoom,-1,at(-5.5F,-.5F)),"La primera fila real de sombra participa en la intersección");
+    Check(!UnitLowerBandTouchesSurface(emptyBand,shadow,anchor,zoom,-1,at(-5.5F,.5F))&&UnitLowerBandTouchesSurface(emptyBand,shadow,anchor,zoom,-1,at(-3.5F,.5F)),"El borde suave de sombra conserva sus dos píxeles de recorte");
+    shadow.shadowHeight=3;
+    Check(!UnitLowerBandTouchesSurface(emptyBand,shadow,anchor,zoom,-1,at(-5.5F,-.5F))&&UnitLowerBandTouchesSurface(emptyBand,shadow,anchor,zoom,-1,at(-5.5F,.5F)),"La sombra de Rider distingue la fila inicial estrecha y la fila central completa");
+  }
+  Check(!UnitLowerBandTouchesSurface(band,noContact,{},0,-1,TopOffsets)&&!UnitLowerBandTouchesSurface(band,noContact,{},-1,-1,TopOffsets),"Una escala inválida no activa la banda inferior");
+  Check(!UnitLowerBandTouchesSurface(band,noContact,{std::numeric_limits<float>::quiet_NaN(),0},1,-1,TopOffsets),"Un anclaje no finito no altera el orden de dibujo");
+}
+void WalkLowerBandProtectsDestinationBeforeProps() {
+  std::array<std::uint8_t,48*64> alpha{};alpha[55*48+24]=255;
+  const auto contact=UnitContactGeometry(UnitClass::Saber,AnimState::Walk,0,1,alpha);
+  const auto feetOnly=UnitLowerBandGeometry(alpha);alpha[53*48+38]=255;const auto withSword=UnitLowerBandGeometry(alpha);
+  for(int zoom=1;zoom<=3;++zoom) {
+    auto match=Board();const int id=Add(match,0,UnitClass::Saber,{});Ok(match.BeginActivation(id));const Match before=match;
+    AnimationDirector director;director.Reset(before);Ok(match.Move(id,{1,0}));director.Observe(before,match);
+    Camera camera;camera.SetZoom(zoom,{});camera.CenterOn({},0.F,{});
+    director.Update(AnimationTiming.walkFrameSeconds*.5F);auto visual=director.VisualFor(id,*match.Find(id));
+    auto point=SnapUnitPoint(camera.ProjectContinuous(visual.q,visual.r,visual.elevation));
+    Check(!UnitLowerBandTouchesSurface(withSword,contact,point,zoom,0,camera.Surface({1,0})),"El destino no adelanta el dibujo antes de tocar una pieza real del marco");
+    director.Update(AnimationTiming.walkFrameSeconds);visual=director.VisualFor(id,*match.Find(id));point=SnapUnitPoint(camera.ProjectContinuous(visual.q,visual.r,visual.elevation));
+    Check(visual.state==AnimState::Walk&&visual.frame==1&&visual.path.size()==2,"El caso de regresión reproduce el segundo marco de una marcha real");
+    Check(!UnitLowerBandTouchesSurface(feetOnly,contact,point,zoom,0,camera.Surface({1,0})),"Los pies todavía no alcanzan la superficie que cortaba la punta de la espada");
+    Check(UnitLowerBandTouchesSurface(withSword,contact,point,zoom,0,camera.Surface({1,0})),"La espada inferior detecta la oclusión antes que los pies y la sombra");
+    Check(!UnitLowerBandTouchesSurface(withSword,contact,point,zoom,0,camera.Surface({2,0})),"Una casilla posterior al tramo no adelanta la unidad a través del mapa");
+    const float base=camera.DepthContinuous(visual.q,visual.r)+1.F,ground=camera.Depth({1,0});
+    Check(base<ground&&ground+.25F<ground+.5F,"El ajuste del tramo queda encima del suelo y debajo de sus props");
+    director.Update(AnimationTiming.walkCellSeconds);const auto idle=director.VisualFor(id,*match.Find(id));
+    Check(idle.state==AnimState::Idle&&idle.path.empty()&&idle.heights.empty(),"Al llegar idle descarta los extremos que podían aplicar la corrección exclusiva de Walk");
+    Near(camera.DepthContinuous(idle.q,idle.r)+1.F,ground+1.F,"Idle conserva la profundidad ordinaria de su casilla final");
+  }
+}
+void WalkBadgeTouchesNeighborWithoutCrossingHigherFloor() {
+  auto match=Board();const int id=Add(match,0,UnitClass::Saber,{});Ok(match.BeginActivation(id));const Match before=match;
+  AnimationDirector director;director.Reset(before);Ok(match.Move(id,{1,0}));director.Observe(before,match);
+  director.Update(AnimationTiming.walkFrameSeconds*5.5F);const auto walking=director.VisualFor(id,*match.Find(id));
+  Check(walking.state==AnimState::Walk&&walking.frame==5,"La regresión reproduce el marco cinco del movimiento que falló en el renderer");
+  Near(walking.q,.6875F,"La marca del caso real avanza hasta Q .6875");
+  const UnitLowerBand emptyBand{};const UnitContact noContact{};
+  for(int zoom=1;zoom<=3;++zoom) {
+    Camera camera;camera.SetZoom(zoom,{});camera.CenterOn({},0.F,{});
+    const auto point=SnapUnitPoint(camera.ProjectContinuous(walking.q,walking.r,walking.elevation));
+    const auto neighbor=camera.Surface({0,1});
+    Check(UnitLowerBandTouchesSurface(emptyBand,noContact,point,zoom,0,neighbor),"La cruz de suelo toca el vecino ajeno a los extremos del tramo");
+    Check(UnitLowerBandTouchesSurface(emptyBand,noContact,point,zoom,1,neighbor),"Las barras del otro bando también participan en el cruce del vecino");
+    Check(!UnitLowerBandTouchesSurface(emptyBand,noContact,point,zoom,-1,neighbor),"El fallo de este caso procede de la marca de suelo y no de alfa corporal inventada");
+    const Rect envelope{point.x-24.F*zoom,point.y-12.F*zoom,48.F*zoom,20.F*zoom};
+    Check(UnitSurfaceTouchesRect(envelope,neighbor),"La preselección de la banda completa conserva el vecino tocado por la marca");
+    const auto raised=camera.Surface({0,1},1.F);
+    Check(UnitSurfaceTouchesRect(envelope,raised)&&UnitLowerBandTouchesSurface(emptyBand,noContact,point,zoom,0,raised),"Un piso vecino alto puede intersectar la misma marca y requiere el límite de altura");
+    Check(camera.Depth({0,1})>camera.Depth({1,0})+.25F,"Los extremos del tramo no bastaban para proteger la marca ante este vecino");
+    if(zoom==1) {
+      Near(point.x,21.F,"El anclaje nativo del fallo real se redondea a X21");Near(point.y,10.F,"El anclaje nativo del fallo real se redondea a Y10");
+      Check(UnitSurfaceTouchesRect({7,14,1,1},neighbor),"El píxel real 10,60 del atlas ocupa el suelo vecino en pantalla7,14");
+    }
+  }
+  Check(UnitWalkSurfaceEligible(walking,{0,1},0.F,AnimationTiming.walkCellSeconds),"Un vecino de igual altura puede proteger el marcador durante Walk");
+  Check(!UnitWalkSurfaceEligible(walking,{0,1},1.F,AnimationTiming.walkCellSeconds),"Un piso alto fuera de la ruta conserva la oclusión y no adelanta la unidad");
+  Check(UnitWalkSurfaceEligible(walking,{0,0},3.F,AnimationTiming.walkCellSeconds)&&UnitWalkSurfaceEligible(walking,{1,0},3.F,AnimationTiming.walkCellSeconds),"Los extremos reales permiten interpolar subidas sin excluir el piso de llegada");
+  for(const auto state:{AnimState::Idle,AnimState::Attack,AnimState::Hurt,AnimState::Death,AnimState::Cast}) {
+    auto other=walking;other.state=state;
+    Check(!UnitWalkSurfaceEligible(other,{0,1},0.F,AnimationTiming.walkCellSeconds)&&!UnitWalkSurfaceEligible(other,{1,0},3.F,AnimationTiming.walkCellSeconds),"La prioridad adicional de banda inferior se limita a Walk incluso si conserva una ruta antigua");
+  }
+  auto routed=walking;routed.path={{0,0},{0,1},{1,1},{2,0}};routed.elapsed=AnimationTiming.walkCellSeconds*1.5F;
+  Check(UnitWalkSurfaceEligible(routed,{0,1},3.F,AnimationTiming.walkCellSeconds)&&UnitWalkSurfaceEligible(routed,{1,1},3.F,AnimationTiming.walkCellSeconds),"La excepción de altura sigue los dos extremos del tramo activo de una ruta larga");
+  Check(!UnitWalkSurfaceEligible(routed,{0,0},3.F,AnimationTiming.walkCellSeconds)&&!UnitWalkSurfaceEligible(routed,{2,0},3.F,AnimationTiming.walkCellSeconds),"Un extremo anterior o futuro no permite atravesar un piso alto");
+  routed.elapsed=AnimationTiming.walkCellSeconds;
+  Check(!UnitWalkSurfaceEligible(routed,{0,0},3.F,AnimationTiming.walkCellSeconds)&&UnitWalkSurfaceEligible(routed,{1,1},3.F,AnimationTiming.walkCellSeconds),"La frontera exacta entre casillas cambia los extremos de la excepción");
+  auto invalid=walking;invalid.path.resize(1);Check(!UnitWalkSurfaceEligible(invalid,{0,0},0.F,AnimationTiming.walkCellSeconds),"Una marcha sin segmento no eleva su prioridad");
+  Check(!UnitWalkSurfaceEligible(walking,{0,1},0.F,0.F)&&!UnitWalkSurfaceEligible(walking,{0,1},0.F,-1.F),"Una duración de casilla inválida no divide el tramo visual");
+  Check(!UnitWalkSurfaceEligible(walking,{0,1},std::numeric_limits<float>::quiet_NaN(),AnimationTiming.walkCellSeconds),"Un piso con altura no finita no afecta la profundidad");
+  director.Update(AnimationTiming.walkCellSeconds);const auto idle=director.VisualFor(id,*match.Find(id));
+  Check(idle.state==AnimState::Idle&&!UnitWalkSurfaceEligible(idle,{0,1},0.F,AnimationTiming.walkCellSeconds),"La llegada a idle desactiva la protección de vecinos de Walk");
 }
 void MoveAttackQueue() {
   auto match=Board();const int actor=Add(match,0,UnitClass::Saber,{}),target=Add(match,1,UnitClass::Saber,{3,0});
@@ -218,10 +610,11 @@ void MoveAttackQueue() {
   Match before=match;Ok(match.Move(actor,{2,0}));director.Observe(before,match);
   before=match;Ok(match.UseAbility(actor,Ability::Attack,{3,0}));director.Observe(before,match,Ability::Attack);
   Check(director.VisualFor(actor,*match.Find(actor)).state==AnimState::Walk,"Attack queues behind unfinished walk");
-  director.Update(0.25F);auto visual=director.VisualFor(actor,*match.Find(actor));
+  const float movementSeconds=2.F*AnimationTiming.walkCellSeconds;
+  director.Update(movementSeconds+.01F);auto visual=director.VisualFor(actor,*match.Find(actor));
   Check(visual.state==AnimState::Attack,"Attack starts after movement completes");Near(visual.q,2,"Queued attack starts at destination");
   const float elapsed=visual.elapsed;director.Observe(match,match);Near(director.VisualFor(actor,*match.Find(actor)).elapsed,elapsed,"No-change Observe does not restart attack");
-  director.Update(0.20F);Check(director.VisualFor(target,*match.Find(target)).state==AnimState::Hurt,"Damage reaction follows queued attack contact pose");
+  director.Update(AnimationTiming.weaponContactSeconds);Check(director.VisualFor(target,*match.Find(target)).state==AnimState::Hurt,"Damage reaction follows queued attack contact pose");
   Check(Effect(director,EffectType::Slash) && Effect(director,EffectType::Damage),"Melee and real HP feedback effects exist");
   director.Update(2);Check(director.VisualFor(actor,*match.Find(actor)).state==AnimState::Idle,"Attack returns to idle");Check(!director.Busy(),"All queued clips and effects eventually finish");
 }
@@ -419,7 +812,18 @@ int main() {
     {"rotated movement and attack facing",RotatedUnitFacing},
     {"anchor zoom and fitted bounds",AnchorAndFit},
     {"elevated top picking and painter order",TopPicking},{"idle phase and immutable rules",IdleClockAndImmutability},
-    {"weighted movement interpolation",LegalWalkInterpolation},{"move attack damage queue",MoveAttackQueue},
+    {"ciclo idle temporal de todas las clases y orientaciones",IdleTemporalCycleAllClassesAndFacings},
+    {"lluvia continua y acotada en distintos viewports",RainViewportMotionAndBounds},
+    {"etapas mágicas con contacto y duración conservados",SpellStagesPreserveContactAndFiniteLifetime},
+    {"incendio nuevo espera al contacto y conserva incendios previos",NewFireWaitsForContactWithoutHidingExistingFire},
+    {"soporte no mágico conserva los efectos originales",NonCasterSupportRetainsOriginalEffects},
+    {"weighted movement interpolation",LegalWalkInterpolation},{"ciclo completo de marcha por casilla y llegada continua",CompleteWalkCyclePerCell},
+    {"marcha continua con giros y desnivel",MultiSegmentWalkContinuity},{"marcha y contacto comparten el reloj de audio",MoveThenAttackContactUsesSharedTiming},
+    {"apoyos de pies y anclaje compartido de sombra e insignia",UnitContactSupportAndSharedAnchor},
+    {"banda inferior e intersección convexa con el suelo",LowerBandSurfaceIntersection},
+    {"marcha protege arma y pies sin adelantar props ni idle",WalkLowerBandProtectsDestinationBeforeProps},
+    {"marca de marcha sobre vecino y límite de pisos altos",WalkBadgeTouchesNeighborWithoutCrossingHigherFloor},
+    {"move attack damage queue",MoveAttackQueue},
     {"persistent death animation",DeathVisibility},{"spell effects and AI inference",SpellEffectsAndAIInference},
     {"environmental purification and capture visuals",EnvironmentalAndCaptureEffects},
     {"bounded log inference",BoundedLogInference},

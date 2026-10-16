@@ -4,9 +4,9 @@
   "seed": 731051,
   "origin": "Original local procedural geometry; no downloaded or generated remote imagery",
   "pixel_art": {
-    "format_version": 3,
-    "generator": "Tools/GeneratePixelArt.ps1",
-    "origin": "Original integer pixel clusters generated locally; no external images, antialiasing or resampling",
+    "format_version": 4,
+    "generator": "Tools/Art/BuildApprovedArt.ps1",
+    "origin": "Approved original raster concepts adapted to native pixel cells. Original Idle artwork recovered exactly from the preserved approved atlas; existing movement/combat frames retained. Local shared materials, faction insignias and staged magic impacts preserved.",
     "rendering": {
       "preferred_integer_scale": 2,
       "filter": "nearest",
@@ -147,7 +147,7 @@
       "terrain": {
         "path": "Content/Textures/Plaguefront/Pixel/terrain.png",
         "size": [
-          480,
+          1920,
           128
         ],
         "frame_size": [
@@ -158,9 +158,9 @@
           24,
           16
         ],
-        "columns": 10,
+        "columns": 40,
         "rows": 4,
-        "fps": 4,
+        "fps": 5,
         "loop": true,
         "columns_by_terrain": {
           "Plain": 0,
@@ -175,7 +175,10 @@
           "Blocked": 9
         },
         "row": "animation frame 0..3",
-        "notes": "Four frames of water, reeds and grass; static mineral/road surfaces may repeat. Tall props are separate."
+        "notes": "Four stable coordinate-selected variants per terrain, each with four animation frames. First ten columns retain their original order. Top surfaces only; side faces and road/bridge connections stay in the renderer.",
+        "variants": 4,
+        "variant_stride": 10,
+        "column_formula": "terrain + 10 * deterministic_cell_variant"
       },
       "props": {
         "path": "Content/Textures/Plaguefront/Pixel/props.png",
@@ -193,7 +196,7 @@
         ],
         "columns": 8,
         "rows": 4,
-        "fps": 4,
+        "fps": 5,
         "loop": true,
         "columns_by_prop": {
           "forest": 0,
@@ -249,12 +252,12 @@
         "states": {
           "Idle": {
             "index": 0,
-            "fps": 9.09,
+            "fps": 5.56,
             "loop": true
           },
           "Walk": {
             "index": 1,
-            "fps": 16.67,
+            "fps": 20,
             "loop": true
           },
           "Attack": {
@@ -291,7 +294,7 @@
             "loop": false
           }
         },
-        "notes": "2688 native frames. Eight unique poses per class/team/direction/state. Blue cloth/cross and crimson cloth/double-bar insignias are authored material variants, never global tinting. Plate, skin, wood and leather stay shared. Caster violet robe and horse brown coat stay shared while tabard/stole and saddle blanket identify the army. Death state frame 7 is a horizontal corpse retaining class equipment and faction, held until environmental conversion. Front/back and mirrored left views use the same frame contract. Presentation controls nonlooped animation timing."
+        "notes": "2688 native frames with the existing 48x64 cell and (24,56) foot anchor. The 448 Idle cells are restored pixel-for-pixel from Sources/Units/Approved/approved-atlas.png (fa1b4944...), preserving the original approved character design; the later 112 regenerated Idle drawings are historical and inactive. Another 2176 movement/combat cells retain the preceding repaired atlas. Only 64 Berserker Walk cells change layer composition: original waistcloth pixels now draw in front of both legs, preventing emblem occlusion without repainting. BuildUnits.py --restore-approved-idle patches only Idle and preserves the destination's other states; full reconstruction includes the waist layer repair. Idle frames last 0.18 seconds. Walking displays all eight frames at 0.05 seconds each per 0.40-second cell, synchronized with existing continuous position/height interpolation. Faction markings stay attached to their original cloth; no per-frame emblem search is used for restored Idle. Left views mirror right views; Death holds its last frame."
       },
       "effects": {
         "path": "Content/Textures/Plaguefront/Pixel/effects.png",
@@ -321,7 +324,8 @@
           "rot_burst": 6,
           "purify": 7
         },
-        "row": "animation frame 0..3"
+        "row": "animation frame 0..3",
+        "notes": "BuildCasterEffects.py adapts twenty original impact drawings for Fire, Ice, Lightning, Heal and Purify. Slash, arrow and rot_burst retain their exact source pixels. SpellPresentation.h and SpellRenderer.cpp stage preparation, release, travel, impact and fade within the existing contact and completion times; the atlas contract is unchanged."
       },
       "icons": {
         "path": "Content/Textures/Plaguefront/Pixel/icons.png",
@@ -401,23 +405,45 @@
       },
       "cursors": {
         "path": "Content/Textures/Plaguefront/Pixel/cursors.png",
-        "size": [144, 24],
-        "frame_size": [24, 24],
+        "size": [
+          144,
+          24
+        ],
+        "frame_size": [
+          24,
+          24
+        ],
         "columns": 6,
         "rows": 1,
-        "hotspot": [1, 1],
-        "columns_by_context": {"Normal": 0, "Move": 1, "Attack": 2, "Capture": 3, "Economy": 4, "Blocked": 5},
+        "hotspot": [
+          1,
+          1
+        ],
+        "columns_by_context": {
+          "Normal": 0,
+          "Move": 1,
+          "Attack": 2,
+          "Capture": 3,
+          "Economy": 4,
+          "Blocked": 5
+        },
         "notes": "Original steel spear-point and bronze grip, with a contextual badge. Native physical pixel scale 1 below 1200 output height and 2 at larger output heights. Context is advisory; Match always validates commands."
       },
       "unit_icons": {
         "path": "Content/Textures/Plaguefront/Pixel/unit-icons.png",
-        "size": [168, 48],
-        "frame_size": [24, 24],
+        "size": [
+          168,
+          48
+        ],
+        "frame_size": [
+          24,
+          24
+        ],
         "columns": 7,
         "rows": 2,
         "column": "UnitClass 0..6",
         "row": "owner 0 blue cross, 1 red double bar",
-        "notes": "Native portrait from the authored class head, framed with faction cloth and an independent shape insignia. Shared metals, skin and wood retain their original colours."
+        "notes": "24x24 class portraits derived from the new class heads, retaining existing frame, faction cloth and shape insignia conventions."
       },
       "menu": {
         "path": "Content/Textures/Plaguefront/Pixel/menu.png",
@@ -441,10 +467,12 @@
           40,
           245,
           355
-        ]
+        ],
+        "palette_mode": "128-color adaptive palette for the background illustration; faction sprite ramps are unchanged"
       }
     },
-    "previews": "build/phase4-art; class/faction lineup, six state strips, fallen bodies, unit portraits, six cursor contexts, binary-alpha/palette/clipping/material validation"
+    "previews": "build/art-final: class/state previews, terrain variants, animation checks and real game screenshots",
+    "source_art": "Tools/Art/Sources"
   },
   "palette": {
     "ink": "#11191b",

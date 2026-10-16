@@ -8,8 +8,10 @@ namespace Plaguefront {
   inline constexpr std::array<Point, 6> TopOffsets{{{10.F, -14.F}, {20.F, 0.F}, {10.F, 14.F}, {-10.F, 14.F}, {-20.F, 0.F}, {-10.F, -14.F}}};
   struct AnimationConfig {
     int frames{8};
-    float idleFrameSeconds{.11F}, walkFrameSeconds{.06F};
-    float walkCellSeconds{.12F}, attackSeconds{.45F}, hurtSeconds{.30F}, deathSeconds{.65F}, castSeconds{.60F};
+    float idleFrameSeconds{.18F}, walkFrameSeconds{.05F};
+    // Cada casilla reproduce el ciclo completo; movimiento visual y audio comparten esta duración.
+    float walkCellSeconds{static_cast<float>(frames) * walkFrameSeconds};
+    float attackSeconds{.45F}, hurtSeconds{.30F}, deathSeconds{.65F}, castSeconds{.60F};
     float weaponContactSeconds{.18F}, spellContactSeconds{.225F}, chainIntervalSeconds{.18F};
   };
   inline constexpr AnimationConfig AnimationTiming{};

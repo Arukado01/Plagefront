@@ -120,11 +120,11 @@ void DirectionalAnimationFrames() {
   }
   auto match=Board();const int actor=Add(match,0,UnitClass::Caster,{});Add(match,1,UnitClass::Saber,{2,0});
   AnimationDirector idle;idle.Reset(match);std::set<int> idleFrames;
-  for(int i=0;i<8;++i) {idleFrames.insert(idle.VisualFor(actor,*match.Find(actor)).frame);idle.Update(.111F);}
+  for(int i=0;i<AnimationTiming.frames;++i) {idleFrames.insert(idle.VisualFor(actor,*match.Find(actor)).frame);idle.Update(AnimationTiming.idleFrameSeconds+.001F);}
   Check(idleFrames.size()==8,"All eight idle poses are sampled");
   Ok(match.BeginActivation(actor));AnimationDirector cast;cast.Reset(match);const Match before=match;
   Ok(match.UseAbility(actor,Ability::Fire,{2,0}));cast.Observe(before,match,Ability::Fire);std::set<int> castFrames;
-  for(int i=0;i<8;++i) {castFrames.insert(cast.VisualFor(actor,*match.Find(actor)).frame);cast.Update(.076F);}
+  for(int i=0;i<AnimationTiming.frames;++i) {castFrames.insert(cast.VisualFor(actor,*match.Find(actor)).frame);cast.Update(AnimationTiming.castSeconds/static_cast<float>(AnimationTiming.frames)+.001F);}
   Check(castFrames.size()==8,"Casting samples anticipation, release and recovery across eight poses");
 }
 void ScenarioDesignAndAlternateCrossings() {

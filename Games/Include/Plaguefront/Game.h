@@ -120,6 +120,8 @@ namespace Plaguefront {
     void PrepareGamepadCapture(int);
     void SmokePhase5(int);
     void SmokeRotPhase5(int);
+    void SmokeVisualCorrections();
+    void SmokeUnitIntegration();
     Result CheckAction(int action, int value = 0) const;
     const Match &PreviewRules() const;
     void RenderWorldLabels() const;
@@ -146,6 +148,7 @@ namespace Plaguefront {
     void RenderSetup() const;
     void RenderBoard() const;
     void RenderWorld() const;
+    void RenderSpellEffect(const VisualEffect &) const;
     const sf::Texture *RotTexture(const sf::Texture *) const;
     void RenderPanel() const;
     void RenderTacticalPanel() const;
