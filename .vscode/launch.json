@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Plaguefront (MSVC)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\build\\Plaguefront.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "preLaunchTask": "Build Plaguefront",
+      "stopAtEntry": false,
+      "symbolOptions": {
+        "searchPaths": [
+          "${workspaceFolder}\\build"
+        ],
+        "searchMicrosoftSymbolServer": true
+      }
+    },
+    {
+      "name": "Plaguefront (sin build)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\build\\Plaguefront.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    }
+  ]
+}
