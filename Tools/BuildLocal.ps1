@@ -3,8 +3,13 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Push-Location $projectRoot
 try {
-  $developerScript = 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat'
-  if (-not (Test-Path -LiteralPath $developerScript)) {
+  $candidates = @(
+    'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat',
+    'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat',
+    'C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat'
+  )
+  $developerScript = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if (-not $developerScript) {
     throw 'No se encuentra VsDevCmd.bat. Abre una Developer PowerShell de MSVC y ejecuta los comandos de README.md.'
   }
   $buildLine = '"' + $developerScript + '" -no_logo -arch=x64 -host_arch=x64 && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TRY_COMPILE_CONFIGURATION=Release && cmake --build build --parallel 4'
