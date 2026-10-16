@@ -400,6 +400,35 @@ void CompleteWalkCyclePerCell() {
     Check(director.VisualFor(id,*match.Find(id)).frame==1&&LogicalFingerprint(match)==committed,"Idle continúa su reloj en el destino sin repetir la orden");
   }
 }
+void FasterWalkPreservesCadenceAndOtherStates() {
+  Near(AnimationTiming.walkFrameSeconds,.05F*.70F,"Walk reduce un treinta por ciento el intervalo anterior de cada marco",.000001F);
+  Near(AnimationTiming.walkCellSeconds,.40F*.70F,"Walk reduce un treinta por ciento la duración completa de una casilla",.000001F);
+  const std::array<std::pair<float,float>,8> unchanged{{
+    {AnimationTiming.idleFrameSeconds,.18F},{AnimationTiming.attackSeconds,.45F},{AnimationTiming.hurtSeconds,.30F},{AnimationTiming.deathSeconds,.65F},
+    {AnimationTiming.castSeconds,.60F},{AnimationTiming.weaponContactSeconds,.18F},{AnimationTiming.spellContactSeconds,.225F},{AnimationTiming.chainIntervalSeconds,.18F}
+  }};
+  for(const auto [actual,expected]:unchanged)Near(actual,expected,"Acelerar Walk conserva los intervalos de idle, combate, contactos y cadena",.000001F);
+  auto match=Board();const int id=Add(match,0,UnitClass::Saber,{});Ok(match.BeginActivation(id));const Match before=match;
+  AnimationDirector director;director.Reset(before);Ok(match.Move(id,{1,0}));director.Observe(before,match);
+  const auto committed=LogicalFingerprint(match);const std::array<float,5> deltas{{.013F,.030F,.021F,.029F,.017F}};
+  std::set<int> frames{0};float elapsed=0.F,previousQ=0.F,lastDelta=0.F;int previousFrame=0,samples=0;
+  while(director.Busy()&&samples<64) {
+    lastDelta=deltas[static_cast<std::size_t>(samples)%deltas.size()];director.Update(lastDelta);elapsed+=lastDelta;++samples;
+    const auto visual=director.VisualFor(id,*match.Find(id));
+    Near(visual.q,std::min(elapsed/AnimationTiming.walkCellSeconds,1.F),"La posición sigue el mismo reloj acelerado con deltas variables del motor");
+    Near(visual.r,0.F,"Acelerar la marcha no desvía su ruta");Near(visual.elevation,0.F,"Acelerar la marcha no altera la altura");
+    Check(visual.q>=previousQ,"La marcha acelerada no retrocede ni salta antes de llegar");previousQ=visual.q;
+    if(visual.state==AnimState::Walk) {
+      frames.insert(visual.frame);Check(visual.frame>=previousFrame&&visual.frame<=previousFrame+1,"Los deltas de hasta treinta milisegundos no omiten marcos de Walk");previousFrame=visual.frame;
+      Check(elapsed<AnimationTiming.walkCellSeconds&&director.Busy(),"Walk mantiene el bloqueo visual hasta completar la llegada acelerada");
+    } else Check(visual.state==AnimState::Idle&&!director.Busy(),"La llegada acelerada libera entradas únicamente al entrar en idle");
+    Check(LogicalFingerprint(match)==committed,"El nuevo ritmo visual no vuelve a ejecutar la acción táctica");
+  }
+  Check(samples<64&&frames.size()==static_cast<std::size_t>(AnimationTiming.frames),"La marcha acelerada reproduce sus ocho marcos bajo la cadencia real del motor");
+  Check(elapsed>=AnimationTiming.walkCellSeconds&&elapsed-lastDelta<AnimationTiming.walkCellSeconds,"La transición a idle sucede en el primer delta que cruza la llegada");
+  const auto idle=director.VisualFor(id,*match.Find(id));Near(idle.q,1.F,"La marcha acelerada conserva el destino exacto");
+  Near(idle.elapsed,elapsed-AnimationTiming.walkCellSeconds,"Idle recibe solo el sobrante del último delta acelerado",.00001F);
+}
 void MultiSegmentWalkContinuity() {
   auto match=Board();const std::vector<Hex> route{{0,0},{0,1},{1,1},{2,0}};
   for(auto &cell:match.state.cells)cell.terrain=Terrain::Blocked;
@@ -818,6 +847,7 @@ int main() {
     {"incendio nuevo espera al contacto y conserva incendios previos",NewFireWaitsForContactWithoutHidingExistingFire},
     {"soporte no mágico conserva los efectos originales",NonCasterSupportRetainsOriginalEffects},
     {"weighted movement interpolation",LegalWalkInterpolation},{"ciclo completo de marcha por casilla y llegada continua",CompleteWalkCyclePerCell},
+    {"marcha más ágil conserva cadencia y otros estados",FasterWalkPreservesCadenceAndOtherStates},
     {"marcha continua con giros y desnivel",MultiSegmentWalkContinuity},{"marcha y contacto comparten el reloj de audio",MoveThenAttackContactUsesSharedTiming},
     {"apoyos de pies y anclaje compartido de sombra e insignia",UnitContactSupportAndSharedAnchor},
     {"banda inferior e intersección convexa con el suelo",LowerBandSurfaceIntersection},

@@ -257,7 +257,7 @@
           },
           "Walk": {
             "index": 1,
-            "fps": 20,
+            "fps": 28.57,
             "loop": true
           },
           "Attack": {
@@ -294,7 +294,7 @@
             "loop": false
           }
         },
-        "notes": "2688 native frames with the existing 48x64 cell and (24,56) foot anchor. The 448 Idle cells are restored pixel-for-pixel from Sources/Units/Approved/approved-atlas.png (fa1b4944...), preserving the original approved character design; the later 112 regenerated Idle drawings are historical and inactive. Another 2176 movement/combat cells retain the preceding repaired atlas. Only 64 Berserker Walk cells change layer composition: original waistcloth pixels now draw in front of both legs, preventing emblem occlusion without repainting. BuildUnits.py --restore-approved-idle patches only Idle and preserves the destination's other states; full reconstruction includes the waist layer repair. Idle frames last 0.18 seconds. Walking displays all eight frames at 0.05 seconds each per 0.40-second cell, synchronized with existing continuous position/height interpolation. Faction markings stay attached to their original cloth; no per-frame emblem search is used for restored Idle. Left views mirror right views; Death holds its last frame."
+        "notes": "2688 native frames with the existing 48x64 cell and (24,56) foot anchor. The 448 Idle cells are restored pixel-for-pixel from Sources/Units/Approved/approved-atlas.png (fa1b4944...), preserving the original approved character design; the later 112 regenerated Idle drawings are historical and inactive. Another 2176 movement/combat cells retain the preceding repaired atlas. Only 64 Berserker Walk cells change layer composition: original waistcloth pixels now draw in front of both legs, preventing emblem occlusion without repainting. BuildUnits.py --restore-approved-idle patches only Idle and preserves the destination's other states; full reconstruction includes the waist layer repair. Idle frames last 0.18 seconds. Walking displays all eight frames at 0.035 seconds each per 0.28-second cell, a 30 percent duration reduction synchronized with existing continuous position/height interpolation. Faction markings stay attached to their original cloth; no per-frame emblem search is used for restored Idle. New full-pose Idle trials remain outside production because they did not preserve stable support and coherent details; the current Idle resource has not been replaced. Left views mirror right views; Death holds its last frame."
       },
       "effects": {
         "path": "Content/Textures/Plaguefront/Pixel/effects.png",
